@@ -84,3 +84,12 @@ export function useLocalSession(sku: string): SessionStore {
 export function readLocalIncidents(sku: string): Incident[] {
   return load(sku);
 }
+
+/** Overwrite a local session's incidents (used by "duplicate as local copy"). */
+export function writeLocalIncidents(sku: string, incidents: Incident[]) {
+  try {
+    localStorage.setItem(keyFor(sku), JSON.stringify({ incidents }));
+  } catch {
+    /* ignore */
+  }
+}

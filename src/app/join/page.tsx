@@ -1,22 +1,34 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Button, Card, Input } from "@/components/ui";
+import { useIdentity } from "@/components/identity-provider";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
-// Allowed code characters: digits 2-9 and A-Z without the ambiguous I and O.
 const DISALLOWED = /[^2-9A-HJ-NP-Z]/g;
 
 export default function JoinGroupPage() {
   const router = useRouter();
+  const { name, setName } = useIdentity();
+  const [nameInput, setNameInput] = useState("");
   const [code, setCode] = useState("");
   const [state, setState] = useState<{ status: "idle" | "joining" | "error"; message?: string }>({
     status: "idle",
   });
 
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (name) setNameInput((prev) => prev || name);
+  }, [name]);
+
   async function join() {
+    const finalName = nameInput.trim();
+    if (!finalName) {
+      setState({ status: "error", message: "Enter your name to join." });
+      return;
+    }
     const clean = code.toUpperCase().replace(DISALLOWED, "").slice(0, 6);
     if (clean.length !== 6) {
       setState({ status: "error", message: "Enter the 6-character group code." });
@@ -27,6 +39,7 @@ export default function JoinGroupPage() {
       setState({ status: "error", message: "Online collaboration isn't configured (Supabase env not set)." });
       return;
     }
+    setName(finalName);
     setState({ status: "joining" });
     const { data: auth } = await supabase.auth.getSession();
     if (!auth.session) await supabase.auth.signInAnonymously();
@@ -35,7 +48,7 @@ export default function JoinGroupPage() {
       setState({ status: "error", message: error?.message ?? "No group found for that code." });
       return;
     }
-    router.push(`/session/${data}`);
+    router.replace(`/session/${data}`);
   }
 
   return (
@@ -43,11 +56,19 @@ export default function JoinGroupPage() {
       <PageHeader title="Join a Group" />
       <main className="flex flex-col gap-5 px-4 py-6">
         <Card>
-          <h2 className="text-sm font-semibold">Enter a group code</h2>
+          <h2 className="text-sm font-semibold">Join with a code</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Ask the head referee for their 6-character code to share violations and notes live.
+            Your name is shown next to violations and notes you add, so it&apos;s required to join.
           </p>
-          <div className="mt-4 flex gap-2">
+          <label className="mt-3 block text-xs font-medium text-muted-foreground">Your name</label>
+          <Input
+            className="mt-1"
+            value={nameInput}
+            onChange={(e) => setNameInput(e.target.value)}
+            placeholder="e.g. Head Ref Sam"
+          />
+          <label className="mt-3 block text-xs font-medium text-muted-foreground">Group code</label>
+          <div className="mt-1 flex gap-2">
             <Input
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase().replace(DISALLOWED, "").slice(0, 6))}

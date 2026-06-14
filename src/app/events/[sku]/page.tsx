@@ -4,8 +4,9 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
-import { Button, Modal, Spinner } from "@/components/ui";
+import { Button, Input, Modal, Spinner } from "@/components/ui";
 import { SessionScreen } from "@/components/session-screen";
+import { useIdentity } from "@/components/identity-provider";
 import { getEventBySku } from "@/lib/vex/client";
 import { readLocalIncidents, useLocalSession } from "@/lib/local-session";
 import { recordRecent, setRecentOnline } from "@/lib/recents";
@@ -16,11 +17,11 @@ export default function EventSessionPage() {
   const sku = params.sku;
   const router = useRouter();
   const store = useLocalSession(sku);
+  const { name, setName } = useIdentity();
 
   const eventQ = useQuery({ queryKey: ["event", sku], queryFn: () => getEventBySku(sku), enabled: !!sku });
   const event = eventQ.data ?? null;
 
-  // Remember this event locally so it shows up under "Recent sessions" at home.
   useEffect(() => {
     if (event) recordRecent({ sku, name: event.name, city: event.location?.city ?? null });
   }, [event, sku]);
@@ -28,8 +29,27 @@ export default function EventSessionPage() {
   const [online, setOnline] = useState<{ state: "idle" | "working" | "error"; message?: string }>({
     state: "idle",
   });
+  const [namePrompt, setNamePrompt] = useState(false);
+  const [draftName, setDraftName] = useState("");
 
-  async function goOnline() {
+  function goOnline() {
+    if (!name.trim()) {
+      setDraftName(name);
+      setNamePrompt(true);
+      return;
+    }
+    void doGoOnline();
+  }
+
+  function confirmName() {
+    const n = draftName.trim();
+    if (!n) return;
+    setName(n);
+    setNamePrompt(false);
+    void doGoOnline();
+  }
+
+  async function doGoOnline() {
     if (!event) return;
     const supabase = getSupabaseBrowserClient();
     if (!supabase) {
@@ -76,7 +96,7 @@ export default function EventSessionPage() {
       }
 
       setRecentOnline(sku, { sessionId, code });
-      router.push(`/session/${sessionId}`);
+      router.replace(`/session/${sessionId}`);
     } catch (e) {
       setOnline({ state: "error", message: (e as Error).message ?? "Failed to go online." });
     }
@@ -121,6 +141,24 @@ export default function EventSessionPage() {
           </Button>
         }
       />
+
+      <Modal open={namePrompt} onClose={() => setNamePrompt(false)}>
+        <h2 className="text-sm font-semibold">Set your name</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Hosting a shared session needs a name so others can see who logged what.
+        </p>
+        <Input
+          className="mt-3"
+          value={draftName}
+          onChange={(e) => setDraftName(e.target.value)}
+          placeholder="e.g. Head Ref Sam"
+          autoFocus
+        />
+        <Button className="mt-3 w-full" onClick={confirmName} disabled={!draftName.trim()}>
+          Continue
+        </Button>
+      </Modal>
+
       <Modal open={online.state === "error"} onClose={() => setOnline({ state: "idle" })}>
         <h2 className="text-sm font-semibold">Couldn&apos;t go online</h2>
         <p className="mt-1 text-xs text-muted-foreground">{online.message}</p>

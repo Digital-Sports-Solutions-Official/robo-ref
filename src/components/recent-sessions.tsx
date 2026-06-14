@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useIdentity } from "@/components/identity-provider";
+import { Button, Modal } from "@/components/ui";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { listRecents, removeRecent, type RecentSession } from "@/lib/recents";
 
@@ -15,6 +16,11 @@ interface OnlineSession {
   owner_id: string;
   created_at: string;
 }
+
+type Confirm =
+  | { kind: "online"; session: OnlineSession }
+  | { kind: "local"; sku: string; name: string }
+  | null;
 
 function CloseIcon() {
   return (
@@ -28,6 +34,7 @@ export function RecentSessions() {
   const { userId } = useIdentity();
   const [locals, setLocals] = useState<RecentSession[]>([]);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [confirm, setConfirm] = useState<Confirm>(null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -55,21 +62,22 @@ export function RecentSessions() {
 
   if (online.length === 0 && localsToShow.length === 0) return null;
 
-  async function removeOnline(s: OnlineSession) {
+  async function doRemove() {
+    if (!confirm) return;
     const supabase = getSupabaseBrowserClient();
-    if (!supabase || !userId) return;
-    if (s.owner_id === userId) {
-      await supabase.from("sessions").delete().eq("id", s.id);
-    } else {
-      await supabase.from("session_members").delete().eq("session_id", s.id).eq("user_id", userId);
+    if (confirm.kind === "online" && supabase && userId) {
+      const s = confirm.session;
+      if (s.owner_id === userId) await supabase.from("sessions").delete().eq("id", s.id);
+      else await supabase.from("session_members").delete().eq("session_id", s.id).eq("user_id", userId);
+      onlineQ.refetch();
+    } else if (confirm.kind === "local") {
+      removeRecent(confirm.sku);
+      setRefreshTick((t) => t + 1);
     }
-    onlineQ.refetch();
+    setConfirm(null);
   }
 
-  function removeLocal(sku: string) {
-    removeRecent(sku);
-    setRefreshTick((t) => t + 1);
-  }
+  const isHostConfirm = confirm?.kind === "online" && confirm.session.owner_id === userId;
 
   return (
     <section className="mt-8">
@@ -85,7 +93,7 @@ export function RecentSessions() {
               </span>
             </Link>
             <button
-              onClick={() => removeOnline(s)}
+              onClick={() => setConfirm({ kind: "online", session: s })}
               aria-label={s.owner_id === userId ? "Delete session" : "Leave session"}
               className="rounded-md p-1 text-muted-foreground transition hover:bg-surface-muted hover:text-danger"
             >
@@ -97,12 +105,10 @@ export function RecentSessions() {
           <div key={r.sku} className="flex items-center gap-2 rounded-xl border border-border bg-surface p-3">
             <Link href={`/events/${encodeURIComponent(r.sku)}`} className="min-w-0 flex-1">
               <span className="block truncate font-medium">{r.name}</span>
-              <span className="block text-xs text-muted-foreground">
-                On this device{r.city ? ` · ${r.city}` : ""}
-              </span>
+              <span className="block text-xs text-muted-foreground">On this device{r.city ? ` · ${r.city}` : ""}</span>
             </Link>
             <button
-              onClick={() => removeLocal(r.sku)}
+              onClick={() => setConfirm({ kind: "local", sku: r.sku, name: r.name })}
               aria-label="Remove cached session"
               className="rounded-md p-1 text-muted-foreground transition hover:bg-surface-muted hover:text-danger"
             >
@@ -111,6 +117,35 @@ export function RecentSessions() {
           </div>
         ))}
       </div>
+
+      <Modal open={confirm !== null} onClose={() => setConfirm(null)}>
+        {confirm ? (
+          <>
+            <h2 className="text-sm font-semibold">
+              {confirm.kind === "online"
+                ? isHostConfirm
+                  ? "Delete this session?"
+                  : "Leave this session?"
+                : "Remove from this device?"}
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {confirm.kind === "online"
+                ? isHostConfirm
+                  ? `This permanently deletes the live session and all entries for every referee.`
+                  : `You'll stop seeing this shared session. The host and others keep it.`
+                : `"${confirm.name}" and its locally cached entries will be deleted from this device.`}
+            </p>
+            <div className="mt-3 flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => setConfirm(null)}>
+                Cancel
+              </Button>
+              <Button variant="danger" className="flex-1" onClick={doRemove}>
+                {confirm.kind === "online" ? (isHostConfirm ? "Delete" : "Leave") : "Delete"}
+              </Button>
+            </div>
+          </>
+        ) : null}
+      </Modal>
     </section>
   );
 }

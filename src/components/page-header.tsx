@@ -29,16 +29,19 @@ export function PageHeader({
   title,
   subtitle,
   right,
+  backHref,
 }: {
   title: string;
   subtitle?: string;
   right?: React.ReactNode;
+  backHref?: string;
 }) {
   const router = useRouter();
+  const goBack = () => (backHref ? router.push(backHref) : router.back());
   return (
     <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-border bg-background/85 px-4 py-3 backdrop-blur">
       <button
-        onClick={() => router.back()}
+        onClick={goBack}
         aria-label="Back"
         className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-surface transition hover:bg-surface-muted"
       >

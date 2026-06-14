@@ -55,7 +55,7 @@ export default function SettingsPage() {
   async function deleteCache() {
     try {
       Object.keys(localStorage)
-        .filter((k) => k.startsWith("roboref.session"))
+        .filter((k) => k.startsWith("roboref.session") || k === "roboref.recents")
         .forEach((k) => localStorage.removeItem(k));
       if ("caches" in window) {
         const keys = await caches.keys();
