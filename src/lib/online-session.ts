@@ -39,12 +39,13 @@ function fromDb(r: DbIncident): Incident {
   };
 }
 
-export function useOnlineSession(sessionId: string, code: string | null): SessionStore {
+export function useOnlineSession(sessionId: string, code: string | null, enabled = true): SessionStore {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!enabled) return;
     const supabase = getSupabaseBrowserClient();
     let active = true;
     let channel: RealtimeChannel | null = null;
@@ -102,7 +103,7 @@ export function useOnlineSession(sessionId: string, code: string | null): Sessio
       active = false;
       if (supabase && channel) supabase.removeChannel(channel);
     };
-  }, [sessionId]);
+  }, [sessionId, enabled]);
 
   const addIncident = useCallback(
     async (input: NewIncident) => {
@@ -124,7 +125,6 @@ export function useOnlineSession(sessionId: string, code: string | null): Sessio
         author_name: input.author,
       });
       if (insertError) setError(insertError.message);
-      // The realtime INSERT event appends it to local state.
     },
     [sessionId],
   );
@@ -137,4 +137,86 @@ export function useOnlineSession(sessionId: string, code: string | null): Sessio
   }, []);
 
   return { incidents, loaded, mode: "online", code, error, addIncident, removeIncident };
+}
+
+/* -------------------------------- Members --------------------------------- */
+
+export interface Member {
+  userId: string;
+  role: string;
+  status: string;
+  name: string | null;
+  joinedAt: string;
+}
+
+interface DbMember {
+  user_id: string;
+  role: string;
+  status: string;
+  member_name: string | null;
+  joined_at: string;
+}
+
+function fromMember(r: DbMember): Member {
+  return { userId: r.user_id, role: r.role, status: r.status, name: r.member_name, joinedAt: r.joined_at };
+}
+
+export function useMembers(sessionId: string, userId: string | null) {
+  const [members, setMembers] = useState<Member[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase || !userId) return;
+    let active = true;
+
+    async function load() {
+      const sb = getSupabaseBrowserClient();
+      if (!sb) return;
+      const { data } = await sb
+        .from("session_members")
+        .select("user_id, role, status, member_name, joined_at")
+        .eq("session_id", sessionId);
+      if (!active) return;
+      setMembers(((data ?? []) as DbMember[]).map(fromMember));
+      setLoaded(true);
+    }
+    load();
+
+    const channel = supabase
+      .channel(`members-${sessionId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "session_members", filter: `session_id=eq.${sessionId}` },
+        () => void load(),
+      )
+      .subscribe();
+
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
+  }, [sessionId, userId]);
+
+  const my = members.find((m) => m.userId === userId) ?? null;
+
+  const approve = useCallback(
+    async (uid: string) => {
+      const sb = getSupabaseBrowserClient();
+      if (!sb) return;
+      await sb.from("session_members").update({ status: "approved" }).eq("session_id", sessionId).eq("user_id", uid);
+    },
+    [sessionId],
+  );
+
+  const removeMember = useCallback(
+    async (uid: string) => {
+      const sb = getSupabaseBrowserClient();
+      if (!sb) return;
+      await sb.from("session_members").delete().eq("session_id", sessionId).eq("user_id", uid);
+    },
+    [sessionId],
+  );
+
+  return { members, loaded, myStatus: my?.status ?? null, myRole: my?.role ?? null, approve, removeMember };
 }

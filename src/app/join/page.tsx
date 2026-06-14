@@ -43,7 +43,7 @@ export default function JoinGroupPage() {
     setState({ status: "joining" });
     const { data: auth } = await supabase.auth.getSession();
     if (!auth.session) await supabase.auth.signInAnonymously();
-    const { data, error } = await supabase.rpc("join_session", { p_code: clean });
+    const { data, error } = await supabase.rpc("join_session", { p_code: clean, p_name: finalName });
     if (error || !data) {
       setState({ status: "error", message: error?.message ?? "No group found for that code." });
       return;

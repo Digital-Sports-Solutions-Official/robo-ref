@@ -4,11 +4,11 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
-import { Button, Modal, Spinner } from "@/components/ui";
+import { Badge, Button, Modal, Spinner } from "@/components/ui";
 import { SessionScreen } from "@/components/session-screen";
 import { useIdentity } from "@/components/identity-provider";
 import { getEventBySku } from "@/lib/vex/client";
-import { useOnlineSession } from "@/lib/online-session";
+import { useMembers, useOnlineSession, type Member } from "@/lib/online-session";
 import { writeLocalIncidents } from "@/lib/local-session";
 import { recordRecent } from "@/lib/recents";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -45,8 +45,12 @@ export default function OnlineSessionPage() {
       return data as SessionRow;
     },
   });
-
   const session = sessionQ.data ?? null;
+
+  const { members, myStatus, myRole, approve, removeMember } = useMembers(id, userId);
+  const isOwner = !!userId && (session?.owner_id === userId || myRole === "owner");
+  const approved = myStatus === "approved" || isOwner;
+
   const eventQ = useQuery({
     queryKey: ["event", session?.event_sku],
     queryFn: () => getEventBySku(session!.event_sku),
@@ -54,7 +58,7 @@ export default function OnlineSessionPage() {
   });
   const event = eventQ.data ?? null;
 
-  const store = useOnlineSession(id, session?.code ?? null);
+  const store = useOnlineSession(id, session?.code ?? null, approved);
 
   function duplicateLocal() {
     if (!session || !event) return;
@@ -95,6 +99,23 @@ export default function OnlineSessionPage() {
       </div>
     );
   }
+
+  // Joined but not yet approved by the host.
+  if (!approved) {
+    return (
+      <div className="mx-auto max-w-md">
+        <PageHeader title={session.event_name ?? "Live Session"} backHref="/" />
+        <div className="flex flex-col items-center gap-3 px-6 py-16 text-center">
+          <Spinner className="size-6" />
+          <h2 className="text-base font-semibold">Waiting for the host to approve you</h2>
+          <p className="text-sm text-muted-foreground">
+            You&apos;ll join automatically once the head referee accepts your request.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (!event) {
     return (
       <div className="mx-auto max-w-md">
@@ -108,15 +129,22 @@ export default function OnlineSessionPage() {
     );
   }
 
-  const isOwner = !!userId && session.owner_id === userId;
-
   return (
     <SessionScreen
       event={event}
       store={store}
       backHref="/"
       headerRight={
-        <SessionMenu code={session.code} isOwner={isOwner} onDuplicate={duplicateLocal} onDelete={deleteOrLeave} />
+        <SessionMenu
+          code={session.code}
+          isOwner={isOwner}
+          ownerId={session.owner_id}
+          members={members}
+          onApprove={approve}
+          onRemoveMember={removeMember}
+          onDuplicate={duplicateLocal}
+          onDelete={deleteOrLeave}
+        />
       }
     />
   );
@@ -125,17 +153,28 @@ export default function OnlineSessionPage() {
 function SessionMenu({
   code,
   isOwner,
+  ownerId,
+  members,
+  onApprove,
+  onRemoveMember,
   onDuplicate,
   onDelete,
 }: {
   code: string;
   isOwner: boolean;
+  ownerId: string;
+  members: Member[];
+  onApprove: (uid: string) => void;
+  onRemoveMember: (uid: string) => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  const pending = members.filter((m) => m.status === "pending");
+  const approved = members.filter((m) => m.status === "approved");
 
   async function copy() {
     try {
@@ -149,21 +188,62 @@ function SessionMenu({
 
   return (
     <>
-      <Button variant="outline" className="px-3 py-1.5 font-mono text-xs tracking-widest" onClick={() => setOpen(true)}>
+      <Button variant="outline" className="relative px-3 py-1.5 font-mono text-xs tracking-widest" onClick={() => setOpen(true)}>
         {code}
+        {isOwner && pending.length > 0 ? (
+          <span className="absolute -right-1.5 -top-1.5 inline-flex size-4 items-center justify-center rounded-full bg-danger text-[10px] font-bold text-white">
+            {pending.length}
+          </span>
+        ) : null}
       </Button>
 
       <Modal open={open} onClose={() => setOpen(false)}>
         <h2 className="text-sm font-semibold">Session</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Others join from Home → Join a Group with this code.
-        </p>
+        <p className="mt-1 text-xs text-muted-foreground">Others join from Home → Join a Group with this code.</p>
         <div className="mt-3 rounded-xl border border-border bg-surface-muted py-4 text-center text-3xl font-bold tracking-[0.3em]">
           {code}
         </div>
         <Button className="mt-2 w-full" onClick={copy}>
           {copied ? "Copied!" : "Copy code"}
         </Button>
+
+        {isOwner ? (
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Members</h3>
+            {pending.length > 0 ? (
+              <div className="mt-2 flex flex-col gap-2">
+                {pending.map((m) => (
+                  <div key={m.userId} className="flex items-center justify-between rounded-lg border border-warning/40 bg-warning/10 px-3 py-2">
+                    <span className="text-sm">
+                      <span className="font-medium">{m.name || "Anonymous"}</span>
+                      <Badge tone="warning" className="ml-2">requesting</Badge>
+                    </span>
+                    <span className="flex gap-1">
+                      <Button className="px-2 py-1 text-xs" onClick={() => onApprove(m.userId)}>Approve</Button>
+                      <Button variant="ghost" className="px-2 py-1 text-xs text-danger" onClick={() => onRemoveMember(m.userId)}>Deny</Button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <div className="mt-2 flex flex-col gap-1.5">
+              {approved.map((m) => (
+                <div key={m.userId} className="flex items-center justify-between px-1 text-sm">
+                  <span>
+                    {m.name || "Anonymous"}
+                    {m.userId === ownerId ? <span className="ml-2 text-xs text-muted-foreground">host</span> : null}
+                  </span>
+                  {m.userId !== ownerId ? (
+                    <button onClick={() => onRemoveMember(m.userId)} className="text-xs text-danger hover:underline">
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <div className="my-3 border-t border-border" />
         <Button variant="outline" className="w-full" onClick={() => { setOpen(false); onDuplicate(); }}>
           Duplicate as local copy
