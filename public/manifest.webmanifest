@@ -1,0 +1,10 @@
+{
+  "name": "robo-ref",
+  "short_name": "robo-ref",
+  "description": "Offline-first VEX referee anomaly log, match notes, and live collaboration.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0f17",
+  "theme_color": "#0b0f17",
+  "icons": []
+}
