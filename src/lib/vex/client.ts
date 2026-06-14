@@ -16,11 +16,8 @@ function buildQuery(params?: Record<string, QueryValue>): string {
   const qs = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined) continue;
-    if (Array.isArray(value)) {
-      value.forEach((item) => qs.append(`${key}[]`, String(item)));
-    } else {
-      qs.append(key, String(value));
-    }
+    if (Array.isArray(value)) value.forEach((item) => qs.append(`${key}[]`, String(item)));
+    else qs.append(key, String(value));
   }
   const s = qs.toString();
   return s ? `?${s}` : "";
@@ -54,26 +51,37 @@ async function vexFetchAll<T>(
 
 const SKU_PATTERN = /^RE-/i;
 
+export interface EventSearchParams {
+  /** Free text: matched against event name, SKU, and city. A SKU resolves directly. */
+  query?: string;
+  /** Inclusive ISO date (YYYY-MM-DD) lower bound on event start. */
+  start?: string;
+  /** Inclusive ISO date (YYYY-MM-DD) upper bound on event start. */
+  end?: string;
+}
+
 /**
- * Search events. VEX events API has no free-text name search, so:
- *  - A SKU-looking query is resolved directly via the `sku` filter.
- *  - Otherwise we pull events in a recent date window and filter by name locally.
+ * Search events by term and/or date range. The VEX API has no free-text name
+ * search, so we fetch a date-bounded window server-side and filter by term
+ * locally; a SKU-looking term resolves directly.
  */
-export async function searchEvents(query: string): Promise<VexEvent[]> {
+export async function searchEvents({ query = "", start, end }: EventSearchParams): Promise<VexEvent[]> {
   const trimmed = query.trim();
 
   if (SKU_PATTERN.test(trimmed)) {
     return vexFetchAll<VexEvent>("events", { sku: [trimmed] }, 1);
   }
 
-  const since = new Date();
-  since.setDate(since.getDate() - 21);
-  const events = await vexFetchAll<VexEvent>(
-    "events",
-    { start: since.toISOString().slice(0, 10) },
-    4,
-  );
+  const params: Record<string, QueryValue> = {};
+  if (start) params.start = start;
+  if (end) params.end = end;
+  if (!start && !end) {
+    const since = new Date();
+    since.setDate(since.getDate() - 21);
+    params.start = since.toISOString().slice(0, 10);
+  }
 
+  const events = await vexFetchAll<VexEvent>("events", params, 5);
   if (!trimmed) return events;
   const q = trimmed.toLowerCase();
   return events.filter(

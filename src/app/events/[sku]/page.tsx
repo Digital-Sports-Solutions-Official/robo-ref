@@ -1,13 +1,14 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
 import { Button, Modal, Spinner } from "@/components/ui";
 import { SessionScreen } from "@/components/session-screen";
 import { getEventBySku } from "@/lib/vex/client";
 import { readLocalIncidents, useLocalSession } from "@/lib/local-session";
+import { recordRecent, setRecentOnline } from "@/lib/recents";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export default function EventSessionPage() {
@@ -18,6 +19,11 @@ export default function EventSessionPage() {
 
   const eventQ = useQuery({ queryKey: ["event", sku], queryFn: () => getEventBySku(sku), enabled: !!sku });
   const event = eventQ.data ?? null;
+
+  // Remember this event locally so it shows up under "Recent sessions" at home.
+  useEffect(() => {
+    if (event) recordRecent({ sku, name: event.name, city: event.location?.city ?? null });
+  }, [event, sku]);
 
   const [online, setOnline] = useState<{ state: "idle" | "working" | "error"; message?: string }>({
     state: "idle",
@@ -49,6 +55,7 @@ export default function EventSessionPage() {
       if (createErr || !created) throw createErr ?? new Error("Could not create the session.");
       const row = Array.isArray(created) ? created[0] : created;
       const sessionId = row.id as string;
+      const code = (row.code as string) ?? "";
 
       const local = readLocalIncidents(sku);
       if (local.length > 0) {
@@ -68,6 +75,7 @@ export default function EventSessionPage() {
         if (upErr) throw upErr;
       }
 
+      setRecentOnline(sku, { sessionId, code });
       router.push(`/session/${sessionId}`);
     } catch (e) {
       setOnline({ state: "error", message: (e as Error).message ?? "Failed to go online." });
