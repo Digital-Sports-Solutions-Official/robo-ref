@@ -2,6 +2,7 @@
 
 import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
+import { Portal } from "@/components/portal";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger" | "outline";
 
@@ -83,5 +84,59 @@ export function Spinner({ className }: { className?: string }) {
       )}
       aria-label="Loading"
     />
+  );
+}
+
+/** Bottom sheet rendered at <body> via Portal (escapes backdrop-filter ancestors). */
+export function Sheet({
+  open,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  if (!open) return null;
+  return (
+    <Portal>
+      <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/40" onClick={onClose}>
+        <div
+          className="max-h-[88dvh] overflow-y-auto rounded-t-2xl border-t border-border bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-border" />
+          {children}
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
+/** Centered modal rendered at <body> via Portal. */
+export function Modal({
+  open,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  if (!open) return null;
+  return (
+    <Portal>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+        onClick={onClose}
+      >
+        <div
+          className="max-h-[85dvh] w-full max-w-sm overflow-y-auto rounded-xl border border-border bg-surface p-4 shadow-lg"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {children}
+        </div>
+      </div>
+    </Portal>
   );
 }

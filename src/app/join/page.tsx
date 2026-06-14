@@ -26,7 +26,9 @@ export default function JoinGroupPage() {
       return;
     }
     setState({ status: "joining" });
-    // Wired to a `join_session` RPC once the database migration is applied.
+    // Ensure we have an authenticated (anonymous) user so the RPC can run.
+    const { data: auth } = await supabase.auth.getSession();
+    if (!auth.session) await supabase.auth.signInAnonymously();
     const { data, error } = await supabase.rpc("join_session", { p_code: clean });
     if (error || !data) {
       setState({ status: "error", message: error?.message ?? "No group found for that code." });

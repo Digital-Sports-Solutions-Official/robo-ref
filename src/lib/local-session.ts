@@ -1,77 +1,86 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { Incident, Note } from "./session-types";
+import type { Incident, IncidentType, NewIncident } from "./session-types";
+import type { SessionStore } from "./session-store";
 
-interface SessionData {
-  incidents: Incident[];
-  notes: Note[];
-}
-
-const EMPTY: SessionData = { incidents: [], notes: [] };
 const keyFor = (sku: string) => `roboref.session.${sku}`;
 
-function load(sku: string): SessionData {
+type RawIncident = Partial<Incident> & { outcome?: string; notes?: string };
+
+function normalize(raw: RawIncident): Incident {
+  const type: IncidentType =
+    raw.type ??
+    (raw.outcome === "dq" || raw.outcome === "disabled"
+      ? "dq"
+      : raw.outcome === "major" || raw.outcome === "minor"
+        ? "violation"
+        : "note");
+  return {
+    id: raw.id ?? crypto.randomUUID(),
+    type,
+    team: raw.team ?? "",
+    matchName: raw.matchName ?? null,
+    matchId: raw.matchId ?? null,
+    division: raw.division ?? null,
+    rules: raw.rules ?? [],
+    note: raw.note ?? raw.notes ?? "",
+    author: raw.author ?? "Anonymous",
+    authorId: raw.authorId ?? null,
+    createdAt: raw.createdAt ?? new Date().toISOString(),
+    updatedAt: raw.updatedAt ?? new Date().toISOString(),
+  };
+}
+
+function load(sku: string): Incident[] {
   try {
     const raw = localStorage.getItem(keyFor(sku));
-    if (!raw) return EMPTY;
-    const parsed = JSON.parse(raw) as Partial<SessionData>;
-    return { incidents: parsed.incidents ?? [], notes: parsed.notes ?? [] };
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as { incidents?: RawIncident[] } | RawIncident[];
+    const list = Array.isArray(parsed) ? parsed : (parsed.incidents ?? []);
+    return list.map(normalize);
   } catch {
-    return EMPTY;
+    return [];
   }
 }
 
-/**
- * Local-first session store. Persists incidents and notes for an event to
- * localStorage so the log works fully offline. (Online sync to Supabase layers
- * on top of this same shape.)
- */
-export function useLocalSession(sku: string) {
-  const [state, setState] = useState<{ data: SessionData; loadedSku: string | null }>({
-    data: EMPTY,
+export function useLocalSession(sku: string): SessionStore {
+  const [state, setState] = useState<{ incidents: Incident[]; loadedSku: string | null }>({
+    incidents: [],
     loadedSku: null,
   });
-  const data = state.data;
+  const incidents = state.incidents;
   const loaded = state.loadedSku === sku;
 
   useEffect(() => {
     // Hydrate the local-first store from localStorage when the event changes.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setState({ data: load(sku), loadedSku: sku });
+    setState({ incidents: load(sku), loadedSku: sku });
   }, [sku]);
 
   useEffect(() => {
     if (!loaded) return;
     try {
-      localStorage.setItem(keyFor(sku), JSON.stringify(data));
+      localStorage.setItem(keyFor(sku), JSON.stringify({ incidents }));
     } catch {
       /* ignore quota errors */
     }
-  }, [sku, data, loaded]);
+  }, [sku, incidents, loaded]);
 
-  const addIncident = useCallback(
-    (input: Omit<Incident, "id" | "sku" | "createdAt" | "updatedAt">) => {
-      const now = new Date().toISOString();
-      const incident: Incident = { ...input, id: crypto.randomUUID(), sku, createdAt: now, updatedAt: now };
-      setState((s) => ({ ...s, data: { ...s.data, incidents: [incident, ...s.data.incidents] } }));
-      return incident;
-    },
-    [sku],
-  );
-
-  const removeIncident = useCallback((id: string) => {
-    setState((s) => ({ ...s, data: { ...s.data, incidents: s.data.incidents.filter((i) => i.id !== id) } }));
+  const addIncident = useCallback((input: NewIncident) => {
+    const now = new Date().toISOString();
+    const incident: Incident = { ...input, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
+    setState((s) => ({ ...s, incidents: [incident, ...s.incidents] }));
   }, []);
 
-  const addNote = useCallback(
-    (input: Omit<Note, "id" | "sku" | "createdAt">) => {
-      const note: Note = { ...input, id: crypto.randomUUID(), sku, createdAt: new Date().toISOString() };
-      setState((s) => ({ ...s, data: { ...s.data, notes: [note, ...s.data.notes] } }));
-      return note;
-    },
-    [sku],
-  );
+  const removeIncident = useCallback((id: string) => {
+    setState((s) => ({ ...s, incidents: s.incidents.filter((i) => i.id !== id) }));
+  }, []);
 
-  return { incidents: data.incidents, notes: data.notes, loaded, addIncident, removeIncident, addNote };
+  return { incidents, loaded, mode: "local", code: null, error: null, addIncident, removeIncident };
+}
+
+/** Read a local session's incidents once (used when uploading to an online session). */
+export function readLocalIncidents(sku: string): Incident[] {
+  return load(sku);
 }

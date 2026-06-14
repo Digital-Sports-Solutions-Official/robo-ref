@@ -11,7 +11,7 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
-export type IncidentOutcome = "general" | "minor" | "major" | "disabled" | "dq";
+export type IncidentType = "dq" | "violation" | "note";
 
 export type Database = {
   public: {
@@ -70,86 +70,51 @@ export type Database = {
         Row: {
           id: string;
           session_id: string;
-          division: string | null;
+          type: IncidentType;
+          team: string;
           match_name: string | null;
           match_id: number | null;
-          team: string;
-          outcome: IncidentOutcome;
+          division: string | null;
           rules: string[];
           notes: string;
           author_id: string | null;
+          author_name: string | null;
           created_at: string;
           updated_at: string;
         };
         Insert: {
           id?: string;
           session_id: string;
-          division?: string | null;
+          type?: IncidentType;
+          team: string;
           match_name?: string | null;
           match_id?: number | null;
-          team: string;
-          outcome?: IncidentOutcome;
+          division?: string | null;
           rules?: string[];
           notes?: string;
           author_id?: string | null;
+          author_name?: string | null;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
           id?: string;
           session_id?: string;
-          division?: string | null;
+          type?: IncidentType;
+          team?: string;
           match_name?: string | null;
           match_id?: number | null;
-          team?: string;
-          outcome?: IncidentOutcome;
+          division?: string | null;
           rules?: string[];
           notes?: string;
           author_id?: string | null;
+          author_name?: string | null;
           created_at?: string;
           updated_at?: string;
         };
         Relationships: [
           {
             foreignKeyName: "incidents_session_id_fkey";
-            columns: ["session_id"];
-            isOneToOne: false;
-            referencedRelation: "sessions";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      notes: {
-        Row: {
-          id: string;
-          session_id: string;
-          match_name: string | null;
-          body: string;
-          author_id: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          session_id: string;
-          match_name?: string | null;
-          body?: string;
-          author_id?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          session_id?: string;
-          match_name?: string | null;
-          body?: string;
-          author_id?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "notes_session_id_fkey";
             columns: ["session_id"];
             isOneToOne: false;
             referencedRelation: "sessions";
@@ -167,7 +132,7 @@ export type Database = {
       join_session: { Args: { p_code: string }; Returns: string };
       is_session_member: { Args: { p_session: string }; Returns: boolean };
     };
-    Enums: { incident_outcome: IncidentOutcome };
+    Enums: { incident_type: IncidentType };
     CompositeTypes: { [_ in never]: never };
   };
 };

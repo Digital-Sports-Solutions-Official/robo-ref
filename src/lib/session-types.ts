@@ -1,40 +1,43 @@
-export type IncidentOutcome = "general" | "minor" | "major" | "disabled" | "dq";
+export type IncidentType = "dq" | "violation" | "note";
 
-export const OUTCOME_LABELS: Record<IncidentOutcome, string> = {
-  general: "General note",
-  minor: "Minor violation",
-  major: "Major violation",
-  disabled: "Disablement",
+export const INCIDENT_TYPES: IncidentType[] = ["dq", "violation", "note"];
+
+export const INCIDENT_TYPE_LABELS: Record<IncidentType, string> = {
   dq: "Disqualification",
+  violation: "Violation",
+  note: "Note",
 };
 
-export const OUTCOME_TONE: Record<IncidentOutcome, "default" | "warning" | "danger"> = {
-  general: "default",
-  minor: "warning",
-  major: "warning",
-  disabled: "danger",
-  dq: "danger",
+export const INCIDENT_TYPE_SHORT: Record<IncidentType, string> = {
+  dq: "DQ",
+  violation: "Violation",
+  note: "Note",
 };
+
+export const INCIDENT_TYPE_TONE: Record<IncidentType, "danger" | "warning" | "default"> = {
+  dq: "danger",
+  violation: "warning",
+  note: "default",
+};
+
+/** dq and violation must cite at least one rule; a note needs none. */
+export function requiresRule(type: IncidentType): boolean {
+  return type === "dq" || type === "violation";
+}
 
 export interface Incident {
   id: string;
-  sku: string;
-  division?: string;
-  matchName?: string;
+  type: IncidentType;
   team: string;
-  outcome: IncidentOutcome;
+  matchName: string | null;
+  matchId: number | null;
+  division: string | null;
   rules: string[];
-  notes: string;
+  note: string;
   author: string;
+  authorId: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface Note {
-  id: string;
-  sku: string;
-  matchName?: string;
-  body: string;
-  author: string;
-  createdAt: string;
-}
+export type NewIncident = Omit<Incident, "id" | "createdAt" | "updatedAt">;
