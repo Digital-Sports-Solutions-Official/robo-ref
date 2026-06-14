@@ -19,7 +19,7 @@ export async function getSupabaseServerClient(): Promise<SupabaseClient | null> 
           cookieStore.set({ name, value, ...options }),
         );
       } catch {
-        // Called from a Server Component; safe to ignore (session refreshed elsewhere).
+        // Called from a Server Component; safe to ignore.
       }
     },
   };

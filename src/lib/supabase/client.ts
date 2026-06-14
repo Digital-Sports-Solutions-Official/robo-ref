@@ -6,6 +6,7 @@ let cached: SupabaseClient | null = null;
 /**
  * Returns a singleton Supabase browser client, or null when env vars are not
  * configured (the app remains usable fully offline/local without Supabase).
+ * Schema types live in src/types/db.ts for typing query results at call sites.
  */
 export function getSupabaseBrowserClient(): SupabaseClient | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
