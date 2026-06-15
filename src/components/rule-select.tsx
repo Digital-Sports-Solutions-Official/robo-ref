@@ -89,9 +89,7 @@ export function RuleSelect({
   accent?: Accent;
   priorCounts?: Record<string, number>;
 }) {
-  const [query, setQuery] = useState("");
   const [describe, setDescribe] = useState<Rule | null>(null);
-  const q = query.trim().toLowerCase();
   const categories = useRules(program);
 
   function setCount(id: string, n: number) {
@@ -107,47 +105,34 @@ export function RuleSelect({
 
   return (
     <div className="flex flex-col gap-2">
-      <input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="Filter rules by name or description"
-        className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm outline-none placeholder:text-muted-foreground focus:border-primary"
-      />
-      <div className="flex max-h-48 flex-col gap-3 overflow-y-auto pr-1">
-        {categories.map((cat) => {
-          const rules = cat.rules.filter(
-            (r) =>
-              !q ||
-              r.id.toLowerCase().includes(q) ||
-              r.title.toLowerCase().includes(q) ||
-              r.description.toLowerCase().includes(q),
-          );
-          if (rules.length === 0) return null;
-          return (
-            <div key={cat.code}>
-              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {cat.label}
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {rules.map((r) => (
-                  <RuleChip
-                    key={r.id}
-                    rule={r}
-                    current={value[r.id] ?? 0}
-                    prior={priorCounts?.[r.id] ?? 0}
-                    accent={accent}
-                    onToggle={() => toggle(r.id)}
-                    onDescribe={() => setDescribe(r)}
-                  />
-                ))}
-              </div>
+      <div className="flex max-h-56 flex-col gap-3 overflow-y-auto pr-1">
+        <p className="text-[11px] text-muted-foreground">
+          Tap to cite a rule. Press &amp; hold for its description and a multi-count. Yellow = prior count for this team.
+        </p>
+        {categories.map((cat) => (
+          <div key={cat.code}>
+            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{cat.label}</div>
+            <div className="flex flex-wrap gap-1.5">
+              {cat.rules.map((r) => (
+                <RuleChip
+                  key={r.id}
+                  rule={r}
+                  current={value[r.id] ?? 0}
+                  prior={priorCounts?.[r.id] ?? 0}
+                  accent={accent}
+                  onToggle={() => toggle(r.id)}
+                  onDescribe={() => setDescribe(r)}
+                />
+              ))}
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
-      <p className="text-[11px] text-muted-foreground">
-        Tap to cite a rule. Press &amp; hold for its description and a multi-count. Yellow = prior count for this team.
-      </p>
+      {Object.keys(value).length > 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Cited: {Object.entries(value).map(([id, n]) => (n > 1 ? `${id} ×${n}` : id)).join(", ")}
+        </p>
+      ) : null}
 
       <Modal open={describe !== null} onClose={() => setDescribe(null)}>
         {describe ? (
@@ -162,19 +147,11 @@ export function RuleSelect({
                 {describedPrior > 0 ? <span className="ml-2 text-xs text-muted-foreground">({describedPrior} prior)</span> : null}
               </span>
               <span className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setCount(describe.id, describedCount - 1)}
-                  className="inline-flex size-7 items-center justify-center rounded-md border border-border text-lg leading-none hover:bg-surface"
-                >
+                <button type="button" onClick={() => setCount(describe.id, describedCount - 1)} className="inline-flex size-7 items-center justify-center rounded-md border border-border text-lg leading-none hover:bg-surface">
                   −
                 </button>
                 <span className="w-5 text-center font-semibold">{describedCount}</span>
-                <button
-                  type="button"
-                  onClick={() => setCount(describe.id, describedCount + 1)}
-                  className="inline-flex size-7 items-center justify-center rounded-md border border-border text-lg leading-none hover:bg-surface"
-                >
+                <button type="button" onClick={() => setCount(describe.id, describedCount + 1)} className="inline-flex size-7 items-center justify-center rounded-md border border-border text-lg leading-none hover:bg-surface">
                   +
                 </button>
               </span>

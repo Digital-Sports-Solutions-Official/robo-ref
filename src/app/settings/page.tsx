@@ -44,7 +44,7 @@ export default function SettingsPage() {
         setIssueState({ status: "error", message: data.error ?? "Could not submit issue." });
         return;
       }
-      setIssueState({ status: "ok", message: data.url ? `Created: ${data.url}` : "Issue submitted. Thank you!" });
+      setIssueState({ status: "ok", message: data.url ? "Thanks! Your report was filed." : "Issue submitted. Thank you!" });
       setIssueTitle("");
       setIssueBody("");
     } catch {

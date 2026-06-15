@@ -41,3 +41,11 @@ export interface Incident {
 }
 
 export type NewIncident = Omit<Incident, "id" | "createdAt" | "updatedAt">;
+
+export type Alliance = "red" | "blue";
+
+export interface MatchMeta {
+  autoWinner: Alliance | "tie" | null;
+  awpWinners: Alliance[];
+  author: string;
+}

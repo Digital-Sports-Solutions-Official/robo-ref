@@ -3,9 +3,9 @@ import "./globals.css";
 import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = {
-  title: "robo-ref",
-  description: "Offline-first VEX referee anomaly log, match notes, and live collaboration.",
-  applicationName: "robo-ref",
+  title: "RoboRef",
+  description: "VEX referee anomaly log, match notes, and live collaboration.",
+  applicationName: "RoboRef",
   manifest: "/manifest.webmanifest",
 };
 
@@ -15,7 +15,6 @@ export const viewport: Viewport = {
   themeColor: "#0b0f17",
 };
 
-// Applies the saved theme before paint to avoid a flash of the wrong theme.
 const themeScript = `(function(){try{var t=localStorage.getItem('roboref.theme');var d=t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(d){document.documentElement.classList.add('dark');}}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

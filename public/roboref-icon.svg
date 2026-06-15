@@ -1,0 +1,15 @@
+<svg width="250" height="250" viewBox="0 0 250 250" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="250" height="250" rx="44" fill="#0b0f17"/>
+<g transform="translate(25 25) scale(0.8)">
+<path d="M225 250L225 225C225 197.386 202.614 175 175 175H75C47.3858 175 25 197.386 25 225L25 250" stroke="white" stroke-width="20"/>
+<line x1="76" y1="250" x2="76" y2="183" stroke="white" stroke-width="20"/>
+<line x1="126" y1="250" x2="126" y2="183" stroke="white" stroke-width="20"/>
+<line x1="176" y1="250" x2="176" y2="183" stroke="white" stroke-width="20"/>
+<rect x="-10" y="10" width="155" height="155" rx="15" transform="matrix(-1 0 0 1 192 0)" stroke="white" stroke-width="20"/>
+<path d="M38 50C24.1929 50 13 61.1929 13 75V100C13 113.807 24.1929 125 38 125V50Z" fill="white"/>
+<path d="M211 50C224.807 50 236 61.1929 236 75V100C236 113.807 224.807 125 211 125V50Z" fill="white"/>
+<circle cx="17.5" cy="17.5" r="17.5" transform="matrix(-1 0 0 1 177 50)" fill="white"/>
+<circle cx="17.5" cy="17.5" r="17.5" transform="matrix(-1 0 0 1 107 50)" fill="white"/>
+<path d="M87 111.5C87 116.141 90.9509 120.592 97.9835 123.874C105.016 127.156 114.554 129 124.5 129C134.446 129 143.984 127.156 151.017 123.874C158.049 120.592 162 116.141 162 111.5L124.5 111.5H87Z" fill="white"/>
+</g>
+</svg>

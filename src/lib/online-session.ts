@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import type { Incident, IncidentType, NewIncident } from "./session-types";
+import type { Incident, IncidentType, MatchMeta, NewIncident } from "./session-types";
 import type { SessionStore } from "./session-store";
 
 interface DbIncident {
@@ -39,8 +39,28 @@ function fromDb(r: DbIncident): Incident {
   };
 }
 
+interface DbMatchMeta {
+  match_name: string;
+  auto_winner: string | null;
+  awp_winners: string[] | null;
+  author_name: string | null;
+}
+
+function metaFromRows(rows: DbMatchMeta[] | null): Record<string, MatchMeta> {
+  const out: Record<string, MatchMeta> = {};
+  for (const r of rows ?? []) {
+    out[r.match_name] = {
+      autoWinner: (r.auto_winner as MatchMeta["autoWinner"]) ?? null,
+      awpWinners: (r.awp_winners as MatchMeta["awpWinners"]) ?? [],
+      author: r.author_name ?? "Referee",
+    };
+  }
+  return out;
+}
+
 export function useOnlineSession(sessionId: string, code: string | null, enabled = true): SessionStore {
   const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [matchMeta, setMatchMetaState] = useState<Record<string, MatchMeta>>({});
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,6 +69,13 @@ export function useOnlineSession(sessionId: string, code: string | null, enabled
     const supabase = getSupabaseBrowserClient();
     let active = true;
     let channel: RealtimeChannel | null = null;
+
+    async function reloadMeta() {
+      const sb = getSupabaseBrowserClient();
+      if (!sb) return;
+      const { data } = await sb.from("match_meta").select("match_name, auto_winner, awp_winners, author_name").eq("session_id", sessionId);
+      if (active) setMatchMetaState(metaFromRows(data as DbMatchMeta[] | null));
+    }
 
     (async () => {
       if (!supabase) {
@@ -66,6 +93,7 @@ export function useOnlineSession(sessionId: string, code: string | null, enabled
       if (!active) return;
       if (loadError) setError(loadError.message);
       else setIncidents((data as DbIncident[]).map(fromDb));
+      await reloadMeta();
       setLoaded(true);
     })();
 
@@ -95,6 +123,11 @@ export function useOnlineSession(sessionId: string, code: string | null, enabled
             const id = (payload.old as { id?: string }).id;
             if (id) setIncidents((prev) => prev.filter((i) => i.id !== id));
           },
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "match_meta", filter: `session_id=eq.${sessionId}` },
+          () => void reloadMeta(),
         )
         .subscribe();
     }
@@ -147,7 +180,49 @@ export function useOnlineSession(sessionId: string, code: string | null, enabled
     if (deleteError) setError(deleteError.message);
   }, []);
 
-  return { incidents, loaded, mode: "online", code, error, addIncident, updateIncident, removeIncident };
+  const setMatchMeta = useCallback(
+    async (
+      matchName: string,
+      matchId: number | null,
+      meta: { autoWinner: MatchMeta["autoWinner"]; awpWinners: MatchMeta["awpWinners"]; author: string },
+    ) => {
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) return;
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      // Optimistic local update so the editor sees it immediately.
+      setMatchMetaState((prev) => ({ ...prev, [matchName]: { autoWinner: meta.autoWinner, awpWinners: meta.awpWinners, author: meta.author } }));
+      const { error: upsertError } = await supabase.from("match_meta").upsert(
+        {
+          session_id: sessionId,
+          match_name: matchName,
+          match_id: matchId,
+          auto_winner: meta.autoWinner,
+          awp_winners: meta.awpWinners,
+          author_id: session?.user?.id ?? null,
+          author_name: meta.author,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "session_id,match_name" },
+      );
+      if (upsertError) setError(upsertError.message);
+    },
+    [sessionId],
+  );
+
+  return {
+    incidents,
+    matchMeta,
+    loaded,
+    mode: "online",
+    code,
+    error,
+    addIncident,
+    updateIncident,
+    removeIncident,
+    setMatchMeta,
+  };
 }
 
 /* -------------------------------- Members --------------------------------- */
