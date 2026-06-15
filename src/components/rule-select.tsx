@@ -16,16 +16,16 @@ const accentActive: Record<Accent, string> = {
 
 function RuleChip({
   rule,
-  active,
+  current,
+  prior,
   accent,
-  priorCount,
   onToggle,
   onDescribe,
 }: {
   rule: Rule;
-  active: boolean;
+  current: number;
+  prior: number;
   accent: Accent;
-  priorCount: number;
   onToggle: () => void;
   onDescribe: () => void;
 }) {
@@ -50,7 +50,8 @@ function RuleChip({
     onToggle();
   }
 
-  const hasPrior = priorCount > 0;
+  const total = prior + current;
+  const active = current > 0;
   return (
     <button
       type="button"
@@ -64,13 +65,13 @@ function RuleChip({
         "select-none rounded-md border px-2 py-1 text-xs font-medium transition",
         active
           ? accentActive[accent]
-          : hasPrior
+          : total > 0
             ? "border-warning bg-warning/15 text-warning"
             : "border-border text-foreground hover:bg-surface-muted",
       )}
     >
       {rule.id}
-      {hasPrior ? <sup className="ml-0.5 font-bold underline">{priorCount}</sup> : null}
+      {total > 0 ? <sup className="ml-0.5 font-bold underline">{total}</sup> : null}
     </button>
   );
 }
@@ -83,8 +84,8 @@ export function RuleSelect({
   priorCounts,
 }: {
   program: Program;
-  value: string[];
-  onChange: (rules: string[]) => void;
+  value: Record<string, number>;
+  onChange: (next: Record<string, number>) => void;
   accent?: Accent;
   priorCounts?: Record<string, number>;
 }) {
@@ -93,8 +94,16 @@ export function RuleSelect({
   const q = query.trim().toLowerCase();
   const categories = useRules(program);
 
-  const toggle = (id: string) =>
-    onChange(value.includes(id) ? value.filter((r) => r !== id) : [...value, id]);
+  function setCount(id: string, n: number) {
+    const next = { ...value };
+    if (n <= 0) delete next[id];
+    else next[id] = n;
+    onChange(next);
+  }
+  const toggle = (id: string) => setCount(id, (value[id] ?? 0) > 0 ? 0 : 1);
+
+  const describedCount = describe ? value[describe.id] ?? 0 : 0;
+  const describedPrior = describe ? priorCounts?.[describe.id] ?? 0 : 0;
 
   return (
     <div className="flex flex-col gap-2">
@@ -124,9 +133,9 @@ export function RuleSelect({
                   <RuleChip
                     key={r.id}
                     rule={r}
-                    active={value.includes(r.id)}
+                    current={value[r.id] ?? 0}
+                    prior={priorCounts?.[r.id] ?? 0}
                     accent={accent}
-                    priorCount={priorCounts?.[r.id] ?? 0}
                     onToggle={() => toggle(r.id)}
                     onDescribe={() => setDescribe(r)}
                   />
@@ -136,9 +145,8 @@ export function RuleSelect({
           );
         })}
       </div>
-      {value.length > 0 ? <p className="text-xs text-muted-foreground">Selected: {value.join(", ")}</p> : null}
       <p className="text-[11px] text-muted-foreground">
-        Press &amp; hold a rule to read it. Yellow = prior violations for this team.
+        Tap to cite a rule. Press &amp; hold for its description and a multi-count. Yellow = prior count for this team.
       </p>
 
       <Modal open={describe !== null} onClose={() => setDescribe(null)}>
@@ -148,6 +156,29 @@ export function RuleSelect({
               {describe.id} · {describe.title}
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">{describe.description || "No description available."}</p>
+            <div className="mt-4 flex items-center justify-between rounded-lg border border-border bg-surface-muted px-3 py-2">
+              <span className="text-sm">
+                Times this match
+                {describedPrior > 0 ? <span className="ml-2 text-xs text-muted-foreground">({describedPrior} prior)</span> : null}
+              </span>
+              <span className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCount(describe.id, describedCount - 1)}
+                  className="inline-flex size-7 items-center justify-center rounded-md border border-border text-lg leading-none hover:bg-surface"
+                >
+                  −
+                </button>
+                <span className="w-5 text-center font-semibold">{describedCount}</span>
+                <button
+                  type="button"
+                  onClick={() => setCount(describe.id, describedCount + 1)}
+                  className="inline-flex size-7 items-center justify-center rounded-md border border-border text-lg leading-none hover:bg-surface"
+                >
+                  +
+                </button>
+              </span>
+            </div>
           </>
         ) : null}
       </Modal>

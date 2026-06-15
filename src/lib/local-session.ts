@@ -73,11 +73,20 @@ export function useLocalSession(sku: string): SessionStore {
     setState((s) => ({ ...s, incidents: [incident, ...s.incidents] }));
   }, []);
 
+  const updateIncident = useCallback((id: string, patch: Partial<Incident>) => {
+    setState((s) => ({
+      ...s,
+      incidents: s.incidents.map((i) =>
+        i.id === id ? { ...i, ...patch, updatedAt: new Date().toISOString() } : i,
+      ),
+    }));
+  }, []);
+
   const removeIncident = useCallback((id: string) => {
     setState((s) => ({ ...s, incidents: s.incidents.filter((i) => i.id !== id) }));
   }, []);
 
-  return { incidents, loaded, mode: "local", code: null, error: null, addIncident, removeIncident };
+  return { incidents, loaded, mode: "local", code: null, error: null, addIncident, updateIncident, removeIncident };
 }
 
 /** Read a local session's incidents once (used when uploading to an online session). */

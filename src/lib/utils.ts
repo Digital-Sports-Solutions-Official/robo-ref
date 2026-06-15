@@ -29,3 +29,12 @@ export function formatEventDates(start?: string | null, end?: string | null): st
   if (s.toDateString() === e.toDateString()) return s.toLocaleDateString(undefined, opts);
   return `${s.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${e.toLocaleDateString(undefined, opts)}`;
 }
+
+/** Render a rules array (which may contain duplicates for multiplicity). */
+export function formatRules(rules: string[]): string {
+  const counts: Record<string, number> = {};
+  for (const r of rules) counts[r] = (counts[r] ?? 0) + 1;
+  return Object.entries(counts)
+    .map(([id, n]) => (n > 1 ? `${id} ×${n}` : id))
+    .join(", ");
+}

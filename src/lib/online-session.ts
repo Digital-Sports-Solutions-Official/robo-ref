@@ -129,6 +129,17 @@ export function useOnlineSession(sessionId: string, code: string | null, enabled
     [sessionId],
   );
 
+  const updateIncident = useCallback(async (id: string, patch: Partial<Incident>) => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+    const db: Record<string, unknown> = {};
+    if (patch.type !== undefined) db.type = patch.type;
+    if (patch.rules !== undefined) db.rules = patch.rules;
+    if (patch.note !== undefined) db.notes = patch.note;
+    const { error: updateError } = await supabase.from("incidents").update(db).eq("id", id);
+    if (updateError) setError(updateError.message);
+  }, []);
+
   const removeIncident = useCallback(async (id: string) => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
@@ -136,7 +147,7 @@ export function useOnlineSession(sessionId: string, code: string | null, enabled
     if (deleteError) setError(deleteError.message);
   }, []);
 
-  return { incidents, loaded, mode: "online", code, error, addIncident, removeIncident };
+  return { incidents, loaded, mode: "online", code, error, addIncident, updateIncident, removeIncident };
 }
 
 /* -------------------------------- Members --------------------------------- */

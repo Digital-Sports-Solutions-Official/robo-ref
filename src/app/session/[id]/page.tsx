@@ -159,6 +159,7 @@ function SessionMenu({
   const [open, setOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState<Member | null>(null);
 
   const pending = members.filter((m) => m.status === "pending");
   const approved = members.filter((m) => m.status === "approved");
@@ -221,9 +222,9 @@ function SessionMenu({
                     {m.userId === ownerId ? <span className="ml-2 text-xs text-muted-foreground">host</span> : null}
                   </span>
                   {m.userId !== ownerId ? (
-                    <button onClick={() => onRemoveMember(m.userId)} className="text-xs text-danger hover:underline">
+                    <Button variant="danger" className="px-2 py-1 text-xs" onClick={() => setConfirmRemove(m)}>
                       Remove
-                    </button>
+                    </Button>
                   ) : null}
                 </div>
               ))}
@@ -252,6 +253,25 @@ function SessionMenu({
             {isOwner ? "Delete" : "Leave"}
           </Button>
         </div>
+      </Modal>
+
+      <Modal open={confirmRemove !== null} onClose={() => setConfirmRemove(null)}>
+        {confirmRemove ? (
+          <>
+            <h2 className="text-sm font-semibold">Remove {confirmRemove.name || "this referee"}?</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              This kicks them from the session immediately. They&apos;d need to request to join and be approved again.
+            </p>
+            <div className="mt-3 flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => setConfirmRemove(null)}>
+                Cancel
+              </Button>
+              <Button variant="danger" className="flex-1" onClick={() => { onRemoveMember(confirmRemove.userId); setConfirmRemove(null); }}>
+                Remove
+              </Button>
+            </div>
+          </>
+        ) : null}
       </Modal>
     </>
   );
