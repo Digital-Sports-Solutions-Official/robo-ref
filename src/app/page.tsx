@@ -72,9 +72,9 @@ export default function HomePage() {
     <main className="mx-auto flex min-h-dvh max-w-md flex-col px-5 py-8">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">robo-ref</h1>
+          <h1 className="text-3xl font-bold tracking-tight">roboRef</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {name ? `Welcome back, ${name}.` : "VEX referee anomaly log & match notes."}
+            {name ? `Welcome back, ${name}.` : "Welcome, stranger!"}
           </p>
         </div>
         <GearLink />
@@ -82,13 +82,13 @@ export default function HomePage() {
 
       <div className="mt-10 flex flex-col gap-4">
         <ActionCard href="/events" title="Search Events" desc="Find an event and start a session" icon={searchIcon} />
-        <ActionCard href="/join" title="Join a Group" desc="Use a code to collaborate live with referees" icon={joinIcon} />
+        <ActionCard href="/join" title="Join a Group" desc="Join live with a code" icon={joinIcon} />
       </div>
 
       <RecentSessions />
 
       <p className="mt-auto pt-10 text-center text-xs text-muted-foreground">
-        Offline-first · your log is stored on this device until you share it
+        Your log is stored on this device until you share it
       </p>
     </main>
   );

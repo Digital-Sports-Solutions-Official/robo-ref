@@ -18,7 +18,7 @@ import {
 } from "@/lib/session-types";
 import type { SessionStore } from "@/lib/session-store";
 import type { VexEvent, VexMatch, VexTeam } from "@/lib/vex/types";
-import { cn, formatEventDates, roundName } from "@/lib/utils";
+import { cn, formatEventDates, formatRules, roundName } from "@/lib/utils";
 
 type Tab = "matches" | "teams" | "log";
 type TeamWithColor = { number: string; color: "red" | "blue" };
@@ -33,11 +33,14 @@ function isCompleted(m: VexMatch): boolean {
   return scores.length >= 2 && scores.some((s) => s > 0);
 }
 
-function violationRuleCounts(incidents: Incident[]): Record<string, number> {
+function countsToRules(counts: Record<string, number>): string[] {
+  const out: string[] = [];
+  for (const [id, n] of Object.entries(counts)) for (let i = 0; i < n; i++) out.push(id);
+  return out;
+}
+function rulesToCounts(rules: string[]): Record<string, number> {
   const c: Record<string, number> = {};
-  for (const i of incidents) {
-    if (i.type === "violation" || i.type === "dq") for (const r of i.rules) c[r] = (c[r] ?? 0) + 1;
-  }
+  for (const r of rules) c[r] = (c[r] ?? 0) + 1;
   return c;
 }
 
@@ -52,9 +55,10 @@ export function SessionScreen({
   headerRight?: React.ReactNode;
   backHref?: string;
 }) {
-  const { name } = useIdentity();
+  const { name, userId } = useIdentity();
   const author = name || "Anonymous";
   const program = useMemo<Program>(() => programFromEvent(event.program), [event.program]);
+  const isMine = (i: Incident) => store.mode === "local" || (!!userId && i.authorId === userId);
 
   const [tab, setTab] = useState<Tab>("matches");
   const [divisionId, setDivisionId] = useState<number | null>(null);
@@ -89,8 +93,14 @@ export function SessionScreen({
     [store.incidents],
   );
 
-  const logMany = (list: NewIncident[]) => list.forEach((i) => void store.addIncident(i));
   const remove = (id: string) => void store.removeIncident(id);
+
+  function submitEntries(entries: { id: string | null; data: NewIncident }[]) {
+    for (const e of entries) {
+      if (e.id) void store.updateIncident(e.id, { type: e.data.type, rules: e.data.rules, note: e.data.note });
+      else void store.addIncident(e.data);
+    }
+  }
 
   function openMatchForIncident(inc: Incident) {
     const m = matches.find((mm) => (inc.matchId != null && mm.id === inc.matchId) || mm.name === inc.matchName);
@@ -183,7 +193,8 @@ export function SessionScreen({
             division={activeDivisionName}
             author={author}
             incidentsByTeam={incidentsByTeam}
-            onLogMany={logMany}
+            isMine={isMine}
+            onSubmit={submitEntries}
           />
         ) : null}
       </Sheet>
@@ -447,7 +458,7 @@ function IncidentRow({
           </span>
           <Badge tone={INCIDENT_TYPE_TONE[i.type]}>{INCIDENT_TYPE_LABELS[i.type]}</Badge>
         </div>
-        {i.rules.length ? <div className="mt-1 text-xs font-medium text-foreground">{i.rules.join(", ")}</div> : null}
+        {i.rules.length ? <div className="mt-1 text-xs font-medium text-foreground">{formatRules(i.rules)}</div> : null}
         {i.note ? <p className="mt-0.5 text-sm text-muted-foreground">{i.note}</p> : null}
       </button>
       <div className="mt-1 flex items-center justify-between">
@@ -464,8 +475,14 @@ function IncidentRow({
 
 /* ------------------------------ Match sheet ------------------------------- */
 
-type TeamCfg = { state: "none" | "violation" | "note"; rules: string[]; note: string; dq: boolean };
-const EMPTY_CFG: TeamCfg = { state: "none", rules: [], note: "", dq: false };
+type TeamCfg = {
+  state: "none" | "violation" | "note";
+  rules: Record<string, number>;
+  note: string;
+  dq: boolean;
+  editingId: string | null;
+};
+const EMPTY_CFG: TeamCfg = { state: "none", rules: {}, note: "", dq: false, editingId: null };
 
 function MatchSheet({
   match,
@@ -473,14 +490,16 @@ function MatchSheet({
   division,
   author,
   incidentsByTeam,
-  onLogMany,
+  isMine,
+  onSubmit,
 }: {
   match: VexMatch;
   program: Program;
   division: string | null;
   author: string;
   incidentsByTeam: Map<string, Incident[]>;
-  onLogMany: (list: NewIncident[]) => void;
+  isMine: (i: Incident) => boolean;
+  onSubmit: (entries: { id: string | null; data: NewIncident }[]) => void;
 }) {
   const teams = matchTeamsWithColor(match);
   const [config, setConfig] = useState<Record<string, TeamCfg>>({});
@@ -490,30 +509,57 @@ function MatchSheet({
   const get = (t: string): TeamCfg => config[t] ?? EMPTY_CFG;
   const set = (t: string, patch: Partial<TeamCfg>) => setConfig((c) => ({ ...c, [t]: { ...get(t), ...patch } }));
 
-  const pending: NewIncident[] = teams
+  const myEntry = (team: string): Incident | undefined =>
+    (incidentsByTeam.get(team) ?? []).find((i) => i.matchName === match.name && isMine(i));
+
+  function priorCountsFor(team: string, editingId: string | null): Record<string, number> {
+    const c: Record<string, number> = {};
+    for (const i of incidentsByTeam.get(team) ?? []) {
+      if ((i.type === "violation" || i.type === "dq") && i.id !== editingId) for (const r of i.rules) c[r] = (c[r] ?? 0) + 1;
+    }
+    return c;
+  }
+
+  function startEdit(team: string) {
+    const e = myEntry(team);
+    if (!e) return;
+    set(team, {
+      state: e.type === "note" ? "note" : "violation",
+      rules: rulesToCounts(e.rules),
+      note: e.note,
+      dq: e.type === "dq",
+      editingId: e.id,
+    });
+  }
+  function startNew(team: string) {
+    if (get(team).editingId !== null) set(team, { ...EMPTY_CFG });
+  }
+
+  const pending = teams
     .filter((t) => get(t.number).state !== "none")
     .map((t) => {
       const cfg = get(t.number);
       const type: IncidentType = cfg.state === "violation" ? (cfg.dq ? "dq" : "violation") : "note";
-      return {
+      const data: NewIncident = {
         type,
         team: t.number,
         matchName: match.name,
         matchId: match.id,
         division,
-        rules: cfg.state === "violation" ? cfg.rules : [],
+        rules: cfg.state === "violation" ? countsToRules(cfg.rules) : [],
         note: cfg.note.trim(),
         author,
         authorId: null,
       };
+      return { id: cfg.editingId, data };
     });
 
   const invalid =
-    pending.some((p) => (p.type === "violation" || p.type === "dq") && p.rules.length === 0) ||
-    pending.some((p) => p.type === "note" && !p.note);
+    pending.some((p) => (p.data.type === "violation" || p.data.type === "dq") && p.data.rules.length === 0) ||
+    pending.some((p) => p.data.type === "note" && !p.data.note);
 
   function confirm() {
-    onLogMany(pending);
+    onSubmit(pending);
     setConfig({});
     setReviewing(false);
   }
@@ -532,18 +578,23 @@ function MatchSheet({
         const cfg = get(t.number);
         const accent = t.color === "red" ? "red" : "blue";
         const isOpen = expanded === t.number;
-        const teamIncs = incidentsByTeam.get(t.number) ?? [];
-        const priorCounts = violationRuleCounts(teamIncs);
+        const mine = myEntry(t.number);
         return (
-          <div key={t.number} className={cn("rounded-xl border", t.color === "red" ? "border-danger/30" : "border-primary/30")}>
+          <div
+            key={t.number}
+            className={cn("overflow-hidden rounded-xl border", t.color === "red" ? "border-danger/30" : "border-primary/30")}
+          >
             <button
               onClick={() => setExpanded(isOpen ? null : t.number)}
-              className="flex w-full items-center justify-between px-3 py-2.5"
+              className={cn("flex w-full items-center justify-between px-3 py-2.5", cfg.state === "violation" ? "bg-warning/15" : "")}
             >
               <span className={cn("font-semibold", t.color === "red" ? "text-danger" : "text-primary")}>{t.number}</span>
               <span className="flex items-center gap-2 text-xs text-muted-foreground">
                 {cfg.state === "violation" ? (
-                  <Badge tone={cfg.dq ? "danger" : "warning"}>{cfg.dq ? "DQ" : "Violation"}{cfg.rules.length ? ` · ${cfg.rules.length}` : ""}</Badge>
+                  <Badge tone={cfg.dq ? "danger" : "warning"}>
+                    {cfg.dq ? "DQ" : "Violation"}
+                    {Object.keys(cfg.rules).length ? ` · ${countsToRules(cfg.rules).length}` : ""}
+                  </Badge>
                 ) : cfg.state === "note" ? (
                   <Badge>Note</Badge>
                 ) : (
@@ -555,6 +606,23 @@ function MatchSheet({
 
             {isOpen ? (
               <div className="border-t border-border px-3 py-3">
+                {mine ? (
+                  <div className="mb-2 flex gap-1 rounded-lg border border-border p-1 text-xs">
+                    <button
+                      onClick={() => startNew(t.number)}
+                      className={cn("flex-1 rounded-md px-2 py-1", cfg.editingId === null ? "bg-surface-muted font-medium" : "text-muted-foreground")}
+                    >
+                      New entry
+                    </button>
+                    <button
+                      onClick={() => startEdit(t.number)}
+                      className={cn("flex-1 rounded-md px-2 py-1", cfg.editingId !== null ? "bg-surface-muted font-medium" : "text-muted-foreground")}
+                    >
+                      Update mine
+                    </button>
+                  </div>
+                ) : null}
+
                 <div className="grid grid-cols-3 gap-1 rounded-lg border border-border p-1">
                   {(["none", "violation", "note"] as const).map((s) => {
                     const activeCls = t.color === "red" ? "bg-danger text-white" : "bg-primary text-primary-foreground";
@@ -582,7 +650,7 @@ function MatchSheet({
                         value={cfg.rules}
                         onChange={(rules) => set(t.number, { rules })}
                         accent={accent}
-                        priorCounts={priorCounts}
+                        priorCounts={priorCountsFor(t.number, cfg.editingId)}
                       />
                     </div>
                     <button
@@ -612,7 +680,9 @@ function MatchSheet({
                   </div>
                 ) : null}
 
-                {teamIncs.length > 0 ? <TeamRunningLog incidents={teamIncs} /> : null}
+                {(incidentsByTeam.get(t.number) ?? []).length > 0 ? (
+                  <TeamRunningLog incidents={incidentsByTeam.get(t.number) ?? []} />
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -622,9 +692,7 @@ function MatchSheet({
       <Button onClick={() => setReviewing(true)} disabled={pending.length === 0 || invalid}>
         Review &amp; log{pending.length > 0 ? ` (${pending.length})` : ""}
       </Button>
-      {invalid ? (
-        <p className="text-xs text-danger">Violations/DQs need ≥1 rule; notes need text.</p>
-      ) : null}
+      {invalid ? <p className="text-xs text-danger">Violations/DQs need ≥1 rule; notes need text.</p> : null}
 
       <Modal open={reviewing} onClose={() => setReviewing(false)}>
         <h2 className="text-sm font-semibold">Confirm {pending.length} for {match.name}</h2>
@@ -632,11 +700,14 @@ function MatchSheet({
           {pending.map((p, idx) => (
             <div key={idx} className="rounded-lg bg-surface-muted px-3 py-2 text-sm">
               <div className="flex items-center justify-between">
-                <span className="font-semibold">{p.team}</span>
-                <Badge tone={INCIDENT_TYPE_TONE[p.type]}>{INCIDENT_TYPE_LABELS[p.type]}</Badge>
+                <span className="font-semibold">
+                  {p.data.team}
+                  {p.id ? <span className="ml-2 text-xs font-normal text-muted-foreground">(update)</span> : null}
+                </span>
+                <Badge tone={INCIDENT_TYPE_TONE[p.data.type]}>{INCIDENT_TYPE_LABELS[p.data.type]}</Badge>
               </div>
-              {p.rules.length ? <div className="text-xs text-muted-foreground">{p.rules.join(", ")}</div> : null}
-              {p.note ? <div className="text-xs text-muted-foreground">{p.note}</div> : null}
+              {p.data.rules.length ? <div className="text-xs text-muted-foreground">{formatRules(p.data.rules)}</div> : null}
+              {p.data.note ? <div className="text-xs text-muted-foreground">{p.data.note}</div> : null}
             </div>
           ))}
         </div>
@@ -660,7 +731,7 @@ function TeamRunningLog({ incidents }: { incidents: Incident[] }) {
               <span className="font-medium">{i.matchName ?? "—"}</span>
               {" · "}
               {INCIDENT_TYPE_SHORT[i.type]}
-              {i.rules.length ? ` ${i.rules.join(",")}` : ""}
+              {i.rules.length ? ` ${formatRules(i.rules)}` : ""}
               {i.note ? ` · ${i.note.slice(0, 40)}${i.note.length > 40 ? "…" : ""}` : ""}
             </span>
             <span className="shrink-0 text-muted-foreground">{i.author}</span>

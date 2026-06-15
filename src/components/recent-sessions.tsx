@@ -46,13 +46,15 @@ export function RecentSessions() {
     enabled: !!userId,
     queryFn: async (): Promise<OnlineSession[]> => {
       const supabase = getSupabaseBrowserClient();
-      if (!supabase) return [];
+      if (!supabase || !userId) return [];
+      // Scope to sessions you are a MEMBER of (not all sessions, even for admins).
       const { data, error } = await supabase
-        .from("sessions")
-        .select("id, code, event_sku, event_name, owner_id, created_at")
-        .order("created_at", { ascending: false });
+        .from("session_members")
+        .select("sessions(id, code, event_sku, event_name, owner_id, created_at)")
+        .eq("user_id", userId);
       if (error) return [];
-      return (data ?? []) as OnlineSession[];
+      const rows = (data ?? []) as unknown as { sessions: OnlineSession | null }[];
+      return rows.map((r) => r.sessions).filter((s): s is OnlineSession => !!s);
     },
   });
 
@@ -62,6 +64,11 @@ export function RecentSessions() {
 
   if (online.length === 0 && localsToShow.length === 0) return null;
 
+  function dropLocalFor(sessionId: string) {
+    const match = locals.find((r) => r.online?.sessionId === sessionId);
+    if (match) removeRecent(match.sku);
+  }
+
   async function doRemove() {
     if (!confirm) return;
     const supabase = getSupabaseBrowserClient();
@@ -69,7 +76,9 @@ export function RecentSessions() {
       const s = confirm.session;
       if (s.owner_id === userId) await supabase.from("sessions").delete().eq("id", s.id);
       else await supabase.from("session_members").delete().eq("session_id", s.id).eq("user_id", userId);
+      dropLocalFor(s.id);
       onlineQ.refetch();
+      setRefreshTick((t) => t + 1);
     } else if (confirm.kind === "local") {
       removeRecent(confirm.sku);
       setRefreshTick((t) => t + 1);
@@ -131,8 +140,8 @@ export function RecentSessions() {
             <p className="mt-1 text-xs text-muted-foreground">
               {confirm.kind === "online"
                 ? isHostConfirm
-                  ? `This permanently deletes the live session and all entries for every referee.`
-                  : `You'll stop seeing this shared session. The host and others keep it.`
+                  ? "This permanently deletes the live session and all entries for every referee."
+                  : "You'll stop seeing this shared session. The host and others keep it."
                 : `"${confirm.name}" and its locally cached entries will be deleted from this device.`}
             </p>
             <div className="mt-3 flex gap-2">
