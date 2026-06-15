@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { Incident, IncidentType, NewIncident } from "./session-types";
+import type { Incident, IncidentType, MatchMeta, NewIncident } from "./session-types";
 import type { SessionStore } from "./session-store";
 
 const keyFor = (sku: string) => `roboref.session.${sku}`;
@@ -32,72 +32,103 @@ function normalize(raw: RawIncident): Incident {
   };
 }
 
-function load(sku: string): Incident[] {
+interface Stored {
+  incidents: Incident[];
+  matchMeta: Record<string, MatchMeta>;
+}
+
+function load(sku: string): Stored {
   try {
     const raw = localStorage.getItem(keyFor(sku));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as { incidents?: RawIncident[] } | RawIncident[];
+    if (!raw) return { incidents: [], matchMeta: {} };
+    const parsed = JSON.parse(raw) as { incidents?: RawIncident[]; matchMeta?: Record<string, MatchMeta> } | RawIncident[];
     const list = Array.isArray(parsed) ? parsed : (parsed.incidents ?? []);
-    return list.map(normalize);
+    const matchMeta = (!Array.isArray(parsed) && parsed.matchMeta) || {};
+    return { incidents: list.map(normalize), matchMeta };
   } catch {
-    return [];
+    return { incidents: [], matchMeta: {} };
   }
 }
 
 export function useLocalSession(sku: string): SessionStore {
-  const [state, setState] = useState<{ incidents: Incident[]; loadedSku: string | null }>({
-    incidents: [],
+  const [state, setState] = useState<{ data: Stored; loadedSku: string | null }>({
+    data: { incidents: [], matchMeta: {} },
     loadedSku: null,
   });
-  const incidents = state.incidents;
+  const data = state.data;
   const loaded = state.loadedSku === sku;
 
   useEffect(() => {
-    // Hydrate the local-first store from localStorage when the event changes.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setState({ incidents: load(sku), loadedSku: sku });
+    setState({ data: load(sku), loadedSku: sku });
   }, [sku]);
 
   useEffect(() => {
     if (!loaded) return;
     try {
-      localStorage.setItem(keyFor(sku), JSON.stringify({ incidents }));
+      localStorage.setItem(keyFor(sku), JSON.stringify(data));
     } catch {
       /* ignore quota errors */
     }
-  }, [sku, incidents, loaded]);
+  }, [sku, data, loaded]);
 
-  const addIncident = useCallback((input: NewIncident) => {
-    const now = new Date().toISOString();
-    const incident: Incident = { ...input, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
-    setState((s) => ({ ...s, incidents: [incident, ...s.incidents] }));
-  }, []);
+  const addIncident = useCallback(
+    (input: NewIncident) => {
+      const now = new Date().toISOString();
+      const incident: Incident = { ...input, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
+      setState((s) => ({ ...s, data: { ...s.data, incidents: [incident, ...s.data.incidents] } }));
+    },
+    [],
+  );
 
   const updateIncident = useCallback((id: string, patch: Partial<Incident>) => {
     setState((s) => ({
       ...s,
-      incidents: s.incidents.map((i) =>
-        i.id === id ? { ...i, ...patch, updatedAt: new Date().toISOString() } : i,
-      ),
+      data: {
+        ...s.data,
+        incidents: s.data.incidents.map((i) =>
+          i.id === id ? { ...i, ...patch, updatedAt: new Date().toISOString() } : i,
+        ),
+      },
     }));
   }, []);
 
   const removeIncident = useCallback((id: string) => {
-    setState((s) => ({ ...s, incidents: s.incidents.filter((i) => i.id !== id) }));
+    setState((s) => ({ ...s, data: { ...s.data, incidents: s.data.incidents.filter((i) => i.id !== id) } }));
   }, []);
 
-  return { incidents, loaded, mode: "local", code: null, error: null, addIncident, updateIncident, removeIncident };
+  const setMatchMeta = useCallback(
+    (matchName: string, _matchId: number | null, meta: { autoWinner: MatchMeta["autoWinner"]; awpWinners: MatchMeta["awpWinners"]; author: string }) => {
+      setState((s) => ({
+        ...s,
+        data: { ...s.data, matchMeta: { ...s.data.matchMeta, [matchName]: { ...meta } } },
+      }));
+    },
+    [],
+  );
+
+  return {
+    incidents: data.incidents,
+    matchMeta: data.matchMeta,
+    loaded,
+    mode: "local",
+    code: null,
+    error: null,
+    addIncident,
+    updateIncident,
+    removeIncident,
+    setMatchMeta,
+  };
 }
 
-/** Read a local session's incidents once (used when uploading to an online session). */
 export function readLocalIncidents(sku: string): Incident[] {
-  return load(sku);
+  return load(sku).incidents;
 }
 
-/** Overwrite a local session's incidents (used by "duplicate as local copy"). */
 export function writeLocalIncidents(sku: string, incidents: Incident[]) {
+  const current = load(sku);
   try {
-    localStorage.setItem(keyFor(sku), JSON.stringify({ incidents }));
+    localStorage.setItem(keyFor(sku), JSON.stringify({ incidents, matchMeta: current.matchMeta }));
   } catch {
     /* ignore */
   }

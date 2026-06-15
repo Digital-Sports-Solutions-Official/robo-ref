@@ -12,8 +12,10 @@ import {
   INCIDENT_TYPE_LABELS,
   INCIDENT_TYPE_SHORT,
   INCIDENT_TYPE_TONE,
+  type Alliance,
   type Incident,
   type IncidentType,
+  type MatchMeta,
   type NewIncident,
 } from "@/lib/session-types";
 import type { SessionStore } from "@/lib/session-store";
@@ -182,7 +184,9 @@ export function SessionScreen({
             onOpen={(number, name) => setOpenTeam({ number, name })}
           />
         ) : null}
-        {tab === "log" ? <LogTab incidents={store.incidents} onRemove={remove} onOpenMatch={openMatchForIncident} /> : null}
+        {tab === "log" ? (
+          <LogTab incidents={store.incidents} onRemove={remove} onOpenMatch={openMatchForIncident} isMine={isMine} />
+        ) : null}
       </main>
 
       <Sheet open={!!openMatch} onClose={() => setOpenMatch(null)}>
@@ -194,6 +198,8 @@ export function SessionScreen({
             author={author}
             incidentsByTeam={incidentsByTeam}
             isMine={isMine}
+            matchMeta={store.matchMeta[openMatch.name]}
+            onSetMeta={(meta) => void store.setMatchMeta(openMatch.name, openMatch.id, { ...meta, author })}
             onSubmit={submitEntries}
           />
         ) : null}
@@ -206,6 +212,7 @@ export function SessionScreen({
             incidents={incidentsByTeam.get(openTeam.number) ?? []}
             onOpenMatch={openMatchForIncident}
             onRemove={remove}
+            isMine={isMine}
           />
         ) : null}
       </Sheet>
@@ -362,7 +369,8 @@ function TeamsTab({
       ) : (
         filtered.map((t) => {
           const list = incidentsByTeam.get(t.number) ?? [];
-          const dq = list.filter((i) => i.type === "dq").length;
+          // A team can only be DQ'd once per match — count distinct matches, not entries.
+          const dq = new Set(list.filter((i) => i.type === "dq").map((i) => i.matchName ?? "—")).size;
           return (
             <button
               key={t.id}
@@ -389,10 +397,12 @@ function LogTab({
   incidents,
   onRemove,
   onOpenMatch,
+  isMine,
 }: {
   incidents: Incident[];
   onRemove: (id: string) => void;
   onOpenMatch: (i: Incident) => void;
+  isMine: (i: Incident) => boolean;
 }) {
   const [q, setQ] = useState("");
   const [type, setType] = useState<IncidentType | "all">("all");
@@ -428,7 +438,7 @@ function LogTab({
         </p>
       ) : (
         filtered.map((i) => (
-          <IncidentRow key={i.id} incident={i} onRemove={onRemove} onOpenMatch={onOpenMatch} showTeam />
+          <IncidentRow key={i.id} incident={i} onRemove={onRemove} onOpenMatch={onOpenMatch} showTeam canRemove={isMine(i)} />
         ))
       )}
     </div>
@@ -442,11 +452,13 @@ function IncidentRow({
   onRemove,
   onOpenMatch,
   showTeam,
+  canRemove,
 }: {
   incident: Incident;
   onRemove?: (id: string) => void;
   onOpenMatch?: (i: Incident) => void;
   showTeam?: boolean;
+  canRemove?: boolean;
 }) {
   return (
     <div className="rounded-lg border border-border bg-surface px-3 py-2">
@@ -463,7 +475,7 @@ function IncidentRow({
       </button>
       <div className="mt-1 flex items-center justify-between">
         <span className="text-xs text-muted-foreground">by {i.author}</span>
-        {onRemove ? (
+        {canRemove && onRemove ? (
           <button onClick={() => onRemove(i.id)} className="text-xs text-danger hover:underline">
             Remove
           </button>
@@ -484,6 +496,77 @@ type TeamCfg = {
 };
 const EMPTY_CFG: TeamCfg = { state: "none", rules: {}, note: "", dq: false, editingId: null };
 
+function MatchOutcome({
+  match,
+  meta,
+  onSet,
+}: {
+  match: VexMatch;
+  meta: MatchMeta | undefined;
+  onSet: (m: { autoWinner: MatchMeta["autoWinner"]; awpWinners: Alliance[] }) => void;
+}) {
+  const hasAlliances =
+    match.alliances.some((a) => a.color === "red") && match.alliances.some((a) => a.color === "blue");
+  if (!hasAlliances) return null;
+
+  const auto = meta?.autoWinner ?? null;
+  const awp = meta?.awpWinners ?? [];
+  const setAuto = (w: MatchMeta["autoWinner"]) => onSet({ autoWinner: w, awpWinners: awp });
+  const toggleAwp = (a: Alliance) =>
+    onSet({ autoWinner: auto, awpWinners: awp.includes(a) ? awp.filter((x) => x !== a) : [...awp, a] });
+
+  const autoCls = (v: MatchMeta["autoWinner"]) =>
+    auto === v
+      ? v === "red"
+        ? "border-danger bg-danger text-white"
+        : v === "blue"
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-foreground/40 bg-foreground/10 text-foreground"
+      : "border-border text-muted-foreground hover:text-foreground";
+
+  return (
+    <div className="rounded-xl border border-border p-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold">Match outcome</h3>
+        {meta ? <span className="text-[11px] text-muted-foreground">set by {meta.author}</span> : null}
+      </div>
+      <label className="mt-2 block text-xs text-muted-foreground">Autonomous winner</label>
+      <div className="mt-1 grid grid-cols-4 gap-1">
+        {([["red", "Red"], ["blue", "Blue"], ["tie", "Tie"], [null, "None"]] as const).map(([v, l]) => (
+          <button
+            key={String(v)}
+            type="button"
+            onClick={() => setAuto(v)}
+            className={cn("rounded-md border px-2 py-1.5 text-xs font-medium transition", autoCls(v))}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+      <label className="mt-3 block text-xs text-muted-foreground">Autonomous Win Point</label>
+      <div className="mt-1 grid grid-cols-2 gap-1">
+        {(["red", "blue"] as const).map((a) => (
+          <button
+            key={a}
+            type="button"
+            onClick={() => toggleAwp(a)}
+            className={cn(
+              "rounded-md border px-2 py-1.5 text-xs font-medium capitalize transition",
+              awp.includes(a)
+                ? a === "red"
+                  ? "border-danger bg-danger/15 text-danger"
+                  : "border-primary bg-primary/15 text-primary"
+                : "border-border text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {a} AWP
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function MatchSheet({
   match,
   program,
@@ -491,6 +574,8 @@ function MatchSheet({
   author,
   incidentsByTeam,
   isMine,
+  matchMeta,
+  onSetMeta,
   onSubmit,
 }: {
   match: VexMatch;
@@ -499,18 +584,37 @@ function MatchSheet({
   author: string;
   incidentsByTeam: Map<string, Incident[]>;
   isMine: (i: Incident) => boolean;
+  matchMeta: MatchMeta | undefined;
+  onSetMeta: (m: { autoWinner: MatchMeta["autoWinner"]; awpWinners: Alliance[] }) => void;
   onSubmit: (entries: { id: string | null; data: NewIncident }[]) => void;
 }) {
   const teams = matchTeamsWithColor(match);
-  const [config, setConfig] = useState<Record<string, TeamCfg>>({});
+
+  const myEntry = (team: string): Incident | undefined =>
+    (incidentsByTeam.get(team) ?? []).find((i) => i.matchName === match.name && isMine(i));
+
+  // Each referee has a single editable entry per team per match: pre-load it.
+  const [config, setConfig] = useState<Record<string, TeamCfg>>(() => {
+    const init: Record<string, TeamCfg> = {};
+    for (const t of teams) {
+      const e = myEntry(t.number);
+      if (e) {
+        init[t.number] = {
+          state: e.type === "note" ? "note" : "violation",
+          rules: rulesToCounts(e.rules),
+          note: e.note,
+          dq: e.type === "dq",
+          editingId: e.id,
+        };
+      }
+    }
+    return init;
+  });
   const [expanded, setExpanded] = useState<string | null>(teams[0]?.number ?? null);
   const [reviewing, setReviewing] = useState(false);
 
   const get = (t: string): TeamCfg => config[t] ?? EMPTY_CFG;
   const set = (t: string, patch: Partial<TeamCfg>) => setConfig((c) => ({ ...c, [t]: { ...get(t), ...patch } }));
-
-  const myEntry = (team: string): Incident | undefined =>
-    (incidentsByTeam.get(team) ?? []).find((i) => i.matchName === match.name && isMine(i));
 
   function priorCountsFor(team: string, editingId: string | null): Record<string, number> {
     const c: Record<string, number> = {};
@@ -518,21 +622,6 @@ function MatchSheet({
       if ((i.type === "violation" || i.type === "dq") && i.id !== editingId) for (const r of i.rules) c[r] = (c[r] ?? 0) + 1;
     }
     return c;
-  }
-
-  function startEdit(team: string) {
-    const e = myEntry(team);
-    if (!e) return;
-    set(team, {
-      state: e.type === "note" ? "note" : "violation",
-      rules: rulesToCounts(e.rules),
-      note: e.note,
-      dq: e.type === "dq",
-      editingId: e.id,
-    });
-  }
-  function startNew(team: string) {
-    if (get(team).editingId !== null) set(team, { ...EMPTY_CFG });
   }
 
   const pending = teams
@@ -560,7 +649,6 @@ function MatchSheet({
 
   function confirm() {
     onSubmit(pending);
-    setConfig({});
     setReviewing(false);
   }
 
@@ -574,11 +662,12 @@ function MatchSheet({
         </span>
       </div>
 
+      <MatchOutcome match={match} meta={matchMeta} onSet={onSetMeta} />
+
       {teams.map((t) => {
         const cfg = get(t.number);
         const accent = t.color === "red" ? "red" : "blue";
         const isOpen = expanded === t.number;
-        const mine = myEntry(t.number);
         return (
           <div
             key={t.number}
@@ -606,23 +695,6 @@ function MatchSheet({
 
             {isOpen ? (
               <div className="border-t border-border px-3 py-3">
-                {mine ? (
-                  <div className="mb-2 flex gap-1 rounded-lg border border-border p-1 text-xs">
-                    <button
-                      onClick={() => startNew(t.number)}
-                      className={cn("flex-1 rounded-md px-2 py-1", cfg.editingId === null ? "bg-surface-muted font-medium" : "text-muted-foreground")}
-                    >
-                      New entry
-                    </button>
-                    <button
-                      onClick={() => startEdit(t.number)}
-                      className={cn("flex-1 rounded-md px-2 py-1", cfg.editingId !== null ? "bg-surface-muted font-medium" : "text-muted-foreground")}
-                    >
-                      Update mine
-                    </button>
-                  </div>
-                ) : null}
-
                 <div className="grid grid-cols-3 gap-1 rounded-lg border border-border p-1">
                   {(["none", "violation", "note"] as const).map((s) => {
                     const activeCls = t.color === "red" ? "bg-danger text-white" : "bg-primary text-primary-foreground";
@@ -695,15 +767,12 @@ function MatchSheet({
       {invalid ? <p className="text-xs text-danger">Violations/DQs need ≥1 rule; notes need text.</p> : null}
 
       <Modal open={reviewing} onClose={() => setReviewing(false)}>
-        <h2 className="text-sm font-semibold">Confirm {pending.length} for {match.name}</h2>
+        <h2 className="text-sm font-semibold">Save {pending.length} for {match.name}</h2>
         <div className="mt-3 flex flex-col gap-2">
           {pending.map((p, idx) => (
             <div key={idx} className="rounded-lg bg-surface-muted px-3 py-2 text-sm">
               <div className="flex items-center justify-between">
-                <span className="font-semibold">
-                  {p.data.team}
-                  {p.id ? <span className="ml-2 text-xs font-normal text-muted-foreground">(update)</span> : null}
-                </span>
+                <span className="font-semibold">{p.data.team}</span>
                 <Badge tone={INCIDENT_TYPE_TONE[p.data.type]}>{INCIDENT_TYPE_LABELS[p.data.type]}</Badge>
               </div>
               {p.data.rules.length ? <div className="text-xs text-muted-foreground">{formatRules(p.data.rules)}</div> : null}
@@ -713,7 +782,7 @@ function MatchSheet({
         </div>
         <div className="mt-4 flex gap-2">
           <Button variant="secondary" className="flex-1" onClick={() => setReviewing(false)}>Back</Button>
-          <Button className="flex-1" onClick={confirm}>Log all</Button>
+          <Button className="flex-1" onClick={confirm}>Save</Button>
         </div>
       </Modal>
     </div>
@@ -749,11 +818,13 @@ function TeamSheet({
   incidents,
   onOpenMatch,
   onRemove,
+  isMine,
 }: {
   team: { number: string; name: string };
   incidents: Incident[];
   onOpenMatch: (i: Incident) => void;
   onRemove: (id: string) => void;
+  isMine: (i: Incident) => boolean;
 }) {
   return (
     <div>
@@ -768,7 +839,9 @@ function TeamSheet({
         {incidents.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">No entries for this team yet.</p>
         ) : (
-          incidents.map((i) => <IncidentRow key={i.id} incident={i} onOpenMatch={onOpenMatch} onRemove={onRemove} />)
+          incidents.map((i) => (
+            <IncidentRow key={i.id} incident={i} onOpenMatch={onOpenMatch} onRemove={onRemove} canRemove={isMine(i)} />
+          ))
         )}
       </div>
     </div>

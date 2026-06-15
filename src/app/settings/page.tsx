@@ -12,44 +12,12 @@ export default function SettingsPage() {
 
   const [draftName, setDraftName] = useState(name);
   const [nameSaved, setNameSaved] = useState(false);
-
-  const [issueTitle, setIssueTitle] = useState("");
-  const [issueBody, setIssueBody] = useState("");
-  const [issueState, setIssueState] = useState<{ status: "idle" | "sending" | "ok" | "error"; message?: string }>({
-    status: "idle",
-  });
-
   const [cacheCleared, setCacheCleared] = useState(false);
 
   function saveName() {
     setName(draftName.trim());
     setNameSaved(true);
     setTimeout(() => setNameSaved(false), 1500);
-  }
-
-  async function submitIssue() {
-    if (!issueTitle.trim()) return;
-    setIssueState({ status: "sending" });
-    try {
-      const res = await fetch("/api/issue", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          title: issueTitle.trim(),
-          body: `${issueBody}\n\n---\nReported by: ${name || "anonymous"}`,
-        }),
-      });
-      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
-      if (!res.ok) {
-        setIssueState({ status: "error", message: data.error ?? "Could not submit issue." });
-        return;
-      }
-      setIssueState({ status: "ok", message: data.url ? `Created: ${data.url}` : "Issue submitted. Thank you!" });
-      setIssueTitle("");
-      setIssueBody("");
-    } catch {
-      setIssueState({ status: "error", message: "Network error submitting issue." });
-    }
   }
 
   async function deleteCache() {
@@ -108,30 +76,10 @@ export default function SettingsPage() {
           </div>
         </Card>
 
-        {/* Report issue */}
+        {/* Report issue (temporarily disabled) */}
         <Card>
           <h2 className="text-sm font-semibold">Report an issue</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">Opens a ticket on the project&apos;s GitHub.</p>
-          <div className="mt-3 flex flex-col gap-2">
-            <Input value={issueTitle} onChange={(e) => setIssueTitle(e.target.value)} placeholder="Short summary" />
-            <textarea
-              value={issueBody}
-              onChange={(e) => setIssueBody(e.target.value)}
-              placeholder="What happened? Steps to reproduce?"
-              rows={3}
-              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/30"
-            />
-            <div className="flex items-center gap-3">
-              <Button onClick={submitIssue} disabled={issueState.status === "sending" || !issueTitle.trim()}>
-                {issueState.status === "sending" ? "Sending…" : "Submit"}
-              </Button>
-              {issueState.message ? (
-                <span className={"text-xs " + (issueState.status === "error" ? "text-danger" : "text-success")}>
-                  {issueState.message}
-                </span>
-              ) : null}
-            </div>
-          </div>
+          <p className="mt-1 text-xs text-muted-foreground">Bug reporting is coming soon.</p>
         </Card>
 
         {/* Delete cache */}
