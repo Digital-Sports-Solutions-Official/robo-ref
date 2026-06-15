@@ -9,13 +9,13 @@ const GREETINGS: ((n: string) => string)[] = [
   (n) => `Welcome back, ${n}.`,
   (n) => `Good to see you, ${n}.`,
   (n) => `Ready to ref, ${n}?`,
-  (n) => `Missed you, ${n}.`,
+  (n) => `Missed you, ${n}!`,
   (n) => `Let's call some matches, ${n}.`,
   (n) => `Eyes on the field, ${n}.`,
   (n) => `Auton in 3, 2, 1...`,
   (n) => `Driver Control in 3, 2, 1...`,
   (n) => `Back in action, ${n}.`,
-  (n) => `Remember ${n}, Team Experience!`,
+  (n) => `Remember, Team Experience!`,
   (n) => `Howdy, ${n}.`,
 ];
 
