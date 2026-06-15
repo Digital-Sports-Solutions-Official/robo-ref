@@ -9,14 +9,13 @@ const GREETINGS: ((n: string) => string)[] = [
   (n) => `Welcome back, ${n}.`,
   (n) => `Good to see you, ${n}.`,
   (n) => `Ready to ref, ${n}?`,
-  (n) => `Ready to rumble, ${n}?`,
+  (n) => `Back at the table, ${n}.`,
   (n) => `Let's call some matches, ${n}.`,
   (n) => `Eyes on the field, ${n}.`,
-  (n) => `Auton in 3, 2, 1...`,
-  (n) => `Driver Control in 3, 2, 1...`,
-  (n) => `Back in action, ${n}.`,
-  (n) => `Remember ${n}, Team Experience.`,
-  (n) => `Howdy, ${n}.`,
+  (n) => `Whistle ready, ${n}?`,
+  (n) => `Welcome back to the booth, ${n}.`,
+  (n) => `Let's keep it fair, ${n}.`,
+  (n) => `Howdy, ${n} — the bots await.`,
 ];
 
 function RoboRefMark({ className }: { className?: string }) {
@@ -27,8 +26,8 @@ function RoboRefMark({ className }: { className?: string }) {
       <line x1="126" y1="300" x2="126" y2="233" stroke="currentColor" strokeWidth="20" />
       <line x1="176" y1="300" x2="176" y2="233" stroke="currentColor" strokeWidth="20" />
       <rect x="-10" y="10" width="155" height="155" rx="15" transform="matrix(-1 0 0 1 192 50)" stroke="currentColor" strokeWidth="20" />
-      <path d="M38 100V100C24.1929 100 13 111.193 13 125V150C13 163.807 24.1929 175 38 175V175V100Z" fill="currentColor" />
-      <path d="M212 100V100C225.807 100 237 111.193 237 125V150C237 163.807 225.807 175 212 175V175V100Z" fill="currentColor" />
+      <path d="M38 100C24.1929 100 13 111.193 13 125V150C13 163.807 24.1929 175 38 175V100Z" fill="currentColor" />
+      <path d="M211 100C224.807 100 236 111.193 236 125V150C236 163.807 224.807 175 211 175V100Z" fill="currentColor" />
       <circle cx="17.5" cy="17.5" r="17.5" transform="matrix(-1 0 0 1 177 100)" fill="currentColor" />
       <circle cx="17.5" cy="17.5" r="17.5" transform="matrix(-1 0 0 1 107 100)" fill="currentColor" />
       <path d="M87 161.5C87 166.141 90.9509 170.592 97.9835 173.874C105.016 177.156 114.554 179 124.5 179C134.446 179 143.984 177.156 151.017 173.874C158.049 170.592 162 166.141 162 161.5L124.5 161.5H87Z" fill="currentColor" />
@@ -142,3 +141,7 @@ export default function HomePage() {
 
       <p className="mt-auto pt-10 text-center text-xs text-muted-foreground">
         Your log is stored on this device until you share it
+      </p>
+    </main>
+  );
+}
