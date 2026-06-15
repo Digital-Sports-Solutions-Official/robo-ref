@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 import { Portal } from "@/components/portal";
@@ -33,10 +34,7 @@ export function Button({
 
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div
-      className={cn("rounded-xl border border-border bg-surface p-4 shadow-sm", className)}
-      {...props}
-    />
+    <div className={cn("rounded-xl border border-border bg-surface p-4 shadow-sm", className)} {...props} />
   );
 }
 
@@ -65,11 +63,7 @@ export function Badge({
   } as const;
   return (
     <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-        tones[tone],
-        className,
-      )}
+      className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", tones[tone], className)}
       {...props}
     />
   );
@@ -78,13 +72,22 @@ export function Badge({
 export function Spinner({ className }: { className?: string }) {
   return (
     <span
-      className={cn(
-        "inline-block size-4 animate-spin rounded-full border-2 border-current border-t-transparent",
-        className,
-      )}
+      className={cn("inline-block size-4 animate-spin rounded-full border-2 border-current border-t-transparent", className)}
       aria-label="Loading"
     />
   );
+}
+
+/** Locks page scrolling while `active` is true (restores on cleanup; nesting-safe). */
+function useBodyScrollLock(active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [active]);
 }
 
 /** Bottom sheet rendered at <body> via Portal (escapes backdrop-filter ancestors). */
@@ -97,6 +100,7 @@ export function Sheet({
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  useBodyScrollLock(open);
   if (!open) return null;
   return (
     <Portal>
@@ -123,13 +127,11 @@ export function Modal({
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  useBodyScrollLock(open);
   if (!open) return null;
   return (
     <Portal>
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-        onClick={onClose}
-      >
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
         <div
           className="max-h-[85dvh] w-full max-w-sm overflow-y-auto rounded-xl border border-border bg-surface p-4 shadow-lg"
           onClick={(e) => e.stopPropagation()}

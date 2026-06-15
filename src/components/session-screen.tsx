@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
 import { Badge, Button, Input, Modal, Sheet, Spinner } from "@/components/ui";
@@ -55,6 +55,23 @@ function cfgEqual(a: TeamCfg, b: TeamCfg): boolean {
   return ak.every((k) => a.rules[k] === b.rules[k]);
 }
 
+function useRevealOnScrollUp(): boolean {
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => {
+    let lastY = window.scrollY;
+    function onScroll() {
+      const y = window.scrollY;
+      if (y < 12) setHidden(false);
+      else if (y > lastY + 4) setHidden(true);
+      else if (y < lastY - 4) setHidden(false);
+      lastY = y;
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  return hidden;
+}
+
 export function SessionScreen({
   event,
   store,
@@ -69,6 +86,7 @@ export function SessionScreen({
   const { name, userId } = useIdentity();
   const author = name || "Anonymous";
   const program = useMemo<Program>(() => programFromEvent(event.program), [event.program]);
+  const hidden = useRevealOnScrollUp();
   const isMine = (i: Incident) => store.mode === "local" || (!!userId && i.authorId === userId);
 
   const [tab, setTab] = useState<Tab>("matches");
@@ -131,41 +149,51 @@ export function SessionScreen({
 
   return (
     <div className="mx-auto max-w-md pb-24">
-      <PageHeader
-        title={event.name}
-        subtitle={`${formatEventDates(event.start, event.end)}${event.location?.city ? " · " + event.location.city : ""}`}
-        right={headerRight}
-        backHref={backHref}
-      />
+      <div
+        className={cn(
+          "sticky top-0 z-30 bg-background/90 backdrop-blur transition-transform duration-200",
+          hidden ? "-translate-y-full" : "translate-y-0",
+        )}
+      >
+        <PageHeader
+          title={event.name}
+          subtitle={`${formatEventDates(event.start, event.end)}${event.location?.city ? " · " + event.location.city : ""}`}
+          right={headerRight}
+          backHref={backHref}
+          sticky={false}
+        />
+        <nav className="grid grid-cols-3 border-b border-border text-sm">
+          {(
+            [
+              ["matches", "Matches"],
+              ["teams", "Teams"],
+              ["log", `Log${store.incidents.length ? ` (${store.incidents.length})` : ""}`],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => {
+                setTab(key as Tab);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              className={cn(
+                "border-b-2 px-1 py-2.5 font-medium transition",
+                tab === key
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+      </div>
 
       {store.error ? (
         <p className="mx-4 mt-3 rounded-lg border border-danger/30 bg-danger/10 p-2 text-xs text-danger">
           {store.error}
         </p>
       ) : null}
-
-      <nav className="grid grid-cols-3 border-b border-border text-sm">
-        {(
-          [
-            ["matches", "Matches"],
-            ["teams", "Teams"],
-            ["log", `Log${store.incidents.length ? ` (${store.incidents.length})` : ""}`],
-          ] as const
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key as Tab)}
-            className={cn(
-              "border-b-2 px-1 py-2.5 font-medium transition",
-              tab === key
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
 
       <main className="px-4 py-4">
         {tab === "matches" ? (

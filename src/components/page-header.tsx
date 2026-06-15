@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useTheme } from "@/components/theme-provider";
+import { cn } from "@/lib/utils";
 
 export function ThemeToggle() {
   const { theme, toggle } = useTheme();
@@ -30,16 +31,23 @@ export function PageHeader({
   subtitle,
   right,
   backHref,
+  sticky = true,
 }: {
   title: string;
   subtitle?: string;
   right?: React.ReactNode;
   backHref?: string;
+  sticky?: boolean;
 }) {
   const router = useRouter();
   const goBack = () => (backHref ? router.push(backHref) : router.back());
   return (
-    <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-border bg-background/85 px-4 py-3 backdrop-blur">
+    <header
+      className={cn(
+        "flex items-center gap-3 border-b border-border px-4 py-3",
+        sticky ? "sticky top-0 z-10 bg-background/85 backdrop-blur" : "",
+      )}
+    >
       <button
         onClick={goBack}
         aria-label="Back"
