@@ -9,13 +9,14 @@ const GREETINGS: ((n: string) => string)[] = [
   (n) => `Welcome back, ${n}.`,
   (n) => `Good to see you, ${n}.`,
   (n) => `Ready to ref, ${n}?`,
-  (n) => `Back at the table, ${n}.`,
+  (n) => `Missed you, ${n}!`,
   (n) => `Let's call some matches, ${n}.`,
   (n) => `Eyes on the field, ${n}.`,
-  (n) => `Whistle ready, ${n}?`,
-  (n) => `Welcome back to the booth, ${n}.`,
-  (n) => `Let's keep it fair, ${n}.`,
-  (n) => `Howdy, ${n} — the bots await.`,
+  () => `Auton in 3, 2, 1...`,
+  () => `Driver Control in 3, 2, 1...`,
+  (n) => `Back in action, ${n}.`,
+  () => `Remember, Team Experience!`,
+  (n) => `Howdy, ${n}.`,
 ];
 
 function RoboRefMark({ className }: { className?: string }) {
