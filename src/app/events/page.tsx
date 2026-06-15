@@ -37,19 +37,19 @@ export default function EventsSearchPage() {
       <main className="px-4 py-4">
         <form onSubmit={submit} className="flex flex-col gap-3">
           <Input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="Event name, city, or SKU (RE-VRC-…)" autoFocus />
-          <div className="flex items-end gap-2">
-            <label className="flex-1 text-xs text-muted-foreground">
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-xs text-muted-foreground">
               From
               <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={dateInput} />
             </label>
-            <label className="flex-1 text-xs text-muted-foreground">
+            <label className="text-xs text-muted-foreground">
               To
               <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={dateInput} />
             </label>
-            <Button type="submit" disabled={!canSearch}>
-              Search
-            </Button>
           </div>
+          <Button type="submit" className="w-full" disabled={!canSearch}>
+            Search
+          </Button>
         </form>
         <p className="mt-2 text-xs text-muted-foreground">
           Search by name/SKU, a date range, or both. A SKU like{" "}
