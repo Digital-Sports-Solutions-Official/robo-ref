@@ -152,3 +152,18 @@ export function ruleInfo(id: string, program?: Program): Rule | undefined {
 export function ruleTitle(id: string, program?: Program): string | undefined {
   return ruleInfo(id, program)?.title;
 }
+
+export interface RulesDoc {
+  programs: Record<string, { categories: RuleCategory[] }>;
+}
+
+/** Assemble the bundled catalogs into the editable rules-document shape. */
+export function bundledRulesDoc(): RulesDoc {
+  return {
+    programs: {
+      V5RC: { categories: rulesForProgram("V5RC") },
+      VEXU: { categories: rulesForProgram("VEXU") },
+      VIQRC: { categories: rulesForProgram("VIQRC") },
+    },
+  };
+}
