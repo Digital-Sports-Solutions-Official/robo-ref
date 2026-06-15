@@ -26,11 +26,10 @@ export default function EventSessionPage() {
     if (event) recordRecent({ sku, name: event.name, city: event.location?.city ?? null });
   }, [event, sku]);
 
-  const [online, setOnline] = useState<{ state: "idle" | "working" | "error"; message?: string }>({
-    state: "idle",
-  });
+  const [online, setOnline] = useState<{ state: "idle" | "working" | "error"; message?: string }>({ state: "idle" });
   const [namePrompt, setNamePrompt] = useState(false);
   const [draftName, setDraftName] = useState("");
+  const [confirmOnline, setConfirmOnline] = useState(false);
 
   function goOnline() {
     if (!name.trim()) {
@@ -38,7 +37,7 @@ export default function EventSessionPage() {
       setNamePrompt(true);
       return;
     }
-    void doGoOnline();
+    setConfirmOnline(true);
   }
 
   function confirmName() {
@@ -46,10 +45,11 @@ export default function EventSessionPage() {
     if (!n) return;
     setName(n);
     setNamePrompt(false);
-    void doGoOnline();
+    setConfirmOnline(true);
   }
 
   async function doGoOnline() {
+    setConfirmOnline(false);
     if (!event) return;
     const supabase = getSupabaseBrowserClient();
     if (!supabase) {
@@ -131,12 +131,7 @@ export default function EventSessionPage() {
         event={event}
         store={store}
         headerRight={
-          <Button
-            variant="outline"
-            className="px-3 py-1.5 text-xs"
-            onClick={goOnline}
-            disabled={online.state === "working"}
-          >
+          <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={goOnline} disabled={online.state === "working"}>
             {online.state === "working" ? "Going online…" : "Go online"}
           </Button>
         }
@@ -147,16 +142,27 @@ export default function EventSessionPage() {
         <p className="mt-1 text-xs text-muted-foreground">
           Hosting a shared session needs a name so others can see who logged what.
         </p>
-        <Input
-          className="mt-3"
-          value={draftName}
-          onChange={(e) => setDraftName(e.target.value)}
-          placeholder="e.g. Head Ref Sam"
-          autoFocus
-        />
+        <Input className="mt-3" value={draftName} onChange={(e) => setDraftName(e.target.value)} placeholder="e.g. Head Ref Sam" autoFocus />
         <Button className="mt-3 w-full" onClick={confirmName} disabled={!draftName.trim()}>
           Continue
         </Button>
+      </Modal>
+
+      <Modal open={confirmOnline} onClose={() => setConfirmOnline(false)}>
+        <h2 className="text-sm font-semibold">Go online &amp; share this session?</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          This publishes the session to the cloud and generates a 6-character code. Other referees enter the code to
+          request access; once you approve them, everyone&apos;s DQs, violations, and notes sync live and show who logged
+          each one. Your current local entries are uploaded.
+        </p>
+        <div className="mt-3 flex gap-2">
+          <Button variant="secondary" className="flex-1" onClick={() => setConfirmOnline(false)}>
+            Cancel
+          </Button>
+          <Button className="flex-1" onClick={() => void doGoOnline()}>
+            Go online
+          </Button>
+        </div>
       </Modal>
 
       <Modal open={online.state === "error"} onClose={() => setOnline({ state: "idle" })}>
