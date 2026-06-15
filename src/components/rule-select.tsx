@@ -2,7 +2,8 @@
 
 import { useRef, useState } from "react";
 import { Modal } from "@/components/ui";
-import { rulesForProgram, type Program, type Rule } from "@/lib/vex/rules";
+import type { Program, Rule } from "@/lib/vex/rules";
+import { useRules } from "@/lib/vex/use-rules";
 import { cn } from "@/lib/utils";
 
 type Accent = "primary" | "red" | "blue";
@@ -17,12 +18,14 @@ function RuleChip({
   rule,
   active,
   accent,
+  priorCount,
   onToggle,
   onDescribe,
 }: {
   rule: Rule;
   active: boolean;
   accent: Accent;
+  priorCount: number;
   onToggle: () => void;
   onDescribe: () => void;
 }) {
@@ -47,6 +50,7 @@ function RuleChip({
     onToggle();
   }
 
+  const hasPrior = priorCount > 0;
   return (
     <button
       type="button"
@@ -58,10 +62,15 @@ function RuleChip({
       title={rule.title}
       className={cn(
         "select-none rounded-md border px-2 py-1 text-xs font-medium transition",
-        active ? accentActive[accent] : "border-border text-foreground hover:bg-surface-muted",
+        active
+          ? accentActive[accent]
+          : hasPrior
+            ? "border-warning bg-warning/15 text-warning"
+            : "border-border text-foreground hover:bg-surface-muted",
       )}
     >
       {rule.id}
+      {hasPrior ? <sup className="ml-0.5 font-bold underline">{priorCount}</sup> : null}
     </button>
   );
 }
@@ -71,16 +80,18 @@ export function RuleSelect({
   value,
   onChange,
   accent = "primary",
+  priorCounts,
 }: {
   program: Program;
   value: string[];
   onChange: (rules: string[]) => void;
   accent?: Accent;
+  priorCounts?: Record<string, number>;
 }) {
   const [query, setQuery] = useState("");
   const [describe, setDescribe] = useState<Rule | null>(null);
   const q = query.trim().toLowerCase();
-  const categories = rulesForProgram(program);
+  const categories = useRules(program);
 
   const toggle = (id: string) =>
     onChange(value.includes(id) ? value.filter((r) => r !== id) : [...value, id]);
@@ -96,7 +107,11 @@ export function RuleSelect({
       <div className="flex max-h-48 flex-col gap-3 overflow-y-auto pr-1">
         {categories.map((cat) => {
           const rules = cat.rules.filter(
-            (r) => !q || r.id.toLowerCase().includes(q) || r.title.toLowerCase().includes(q),
+            (r) =>
+              !q ||
+              r.id.toLowerCase().includes(q) ||
+              r.title.toLowerCase().includes(q) ||
+              r.description.toLowerCase().includes(q),
           );
           if (rules.length === 0) return null;
           return (
@@ -111,6 +126,7 @@ export function RuleSelect({
                     rule={r}
                     active={value.includes(r.id)}
                     accent={accent}
+                    priorCount={priorCounts?.[r.id] ?? 0}
                     onToggle={() => toggle(r.id)}
                     onDescribe={() => setDescribe(r)}
                   />
@@ -121,13 +137,17 @@ export function RuleSelect({
         })}
       </div>
       {value.length > 0 ? <p className="text-xs text-muted-foreground">Selected: {value.join(", ")}</p> : null}
-      <p className="text-[11px] text-muted-foreground">Tip: press and hold a rule to read it.</p>
+      <p className="text-[11px] text-muted-foreground">
+        Press &amp; hold a rule to read it. Yellow = prior violations for this team.
+      </p>
 
       <Modal open={describe !== null} onClose={() => setDescribe(null)}>
         {describe ? (
           <>
-            <h2 className="text-base font-semibold">{describe.id}</h2>
-            <p className="mt-2 text-sm text-muted-foreground">{describe.title}</p>
+            <h2 className="text-base font-semibold">
+              {describe.id} · {describe.title}
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">{describe.description || "No description available."}</p>
           </>
         ) : null}
       </Modal>

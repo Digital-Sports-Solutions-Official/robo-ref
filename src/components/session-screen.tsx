@@ -9,11 +9,9 @@ import { getDivisionMatches, getEventTeams } from "@/lib/vex/client";
 import { programFromEvent, type Program } from "@/lib/vex/rules";
 import { useIdentity } from "@/components/identity-provider";
 import {
-  INCIDENT_TYPES,
   INCIDENT_TYPE_LABELS,
   INCIDENT_TYPE_SHORT,
   INCIDENT_TYPE_TONE,
-  requiresRule,
   type Incident,
   type IncidentType,
   type NewIncident,
@@ -23,7 +21,6 @@ import type { VexEvent, VexMatch, VexTeam } from "@/lib/vex/types";
 import { cn, formatEventDates, roundName } from "@/lib/utils";
 
 type Tab = "matches" | "teams" | "log";
-type Accent = "primary" | "red" | "blue";
 type TeamWithColor = { number: string; color: "red" | "blue" };
 
 function matchTeamsWithColor(m: VexMatch): TeamWithColor[] {
@@ -34,6 +31,14 @@ function isCompleted(m: VexMatch): boolean {
   if (m.scored === true) return true;
   const scores = m.alliances.map((a) => a.score).filter((s): s is number => typeof s === "number");
   return scores.length >= 2 && scores.some((s) => s > 0);
+}
+
+function violationRuleCounts(incidents: Incident[]): Record<string, number> {
+  const c: Record<string, number> = {};
+  for (const i of incidents) {
+    if (i.type === "violation" || i.type === "dq") for (const r of i.rules) c[r] = (c[r] ?? 0) + 1;
+  }
+  return c;
 }
 
 export function SessionScreen({
@@ -85,8 +90,15 @@ export function SessionScreen({
   );
 
   const logMany = (list: NewIncident[]) => list.forEach((i) => void store.addIncident(i));
-  const add = (input: NewIncident) => void store.addIncident(input);
   const remove = (id: string) => void store.removeIncident(id);
+
+  function openMatchForIncident(inc: Incident) {
+    const m = matches.find((mm) => (inc.matchId != null && mm.id === inc.matchId) || mm.name === inc.matchName);
+    if (m) {
+      setOpenTeam(null);
+      setOpenMatch(m);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-md pb-24">
@@ -160,7 +172,7 @@ export function SessionScreen({
             onOpen={(number, name) => setOpenTeam({ number, name })}
           />
         ) : null}
-        {tab === "log" ? <LogTab incidents={store.incidents} onRemove={remove} /> : null}
+        {tab === "log" ? <LogTab incidents={store.incidents} onRemove={remove} onOpenMatch={openMatchForIncident} /> : null}
       </main>
 
       <Sheet open={!!openMatch} onClose={() => setOpenMatch(null)}>
@@ -170,9 +182,8 @@ export function SessionScreen({
             program={program}
             division={activeDivisionName}
             author={author}
-            incidents={store.incidents.filter((i) => i.matchName === openMatch.name)}
+            incidentsByTeam={incidentsByTeam}
             onLogMany={logMany}
-            onRemove={remove}
           />
         ) : null}
       </Sheet>
@@ -181,12 +192,8 @@ export function SessionScreen({
         {openTeam ? (
           <TeamSheet
             team={openTeam}
-            program={program}
-            division={activeDivisionName}
-            author={author}
-            matches={matches}
             incidents={incidentsByTeam.get(openTeam.number) ?? []}
-            onAdd={add}
+            onOpenMatch={openMatchForIncident}
             onRemove={remove}
           />
         ) : null}
@@ -249,9 +256,7 @@ function MatchesTab({
       ))}
 
       {completed.length > 0 ? (
-        <div className="mt-3 mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Completed
-        </div>
+        <div className="mt-3 mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Completed</div>
       ) : null}
       {completed.map((m) => (
         <MatchRow key={m.id} match={m} flagged={flagged.has(m.name)} onOpen={onOpen} dim />
@@ -369,7 +374,15 @@ function TeamsTab({
   );
 }
 
-function LogTab({ incidents, onRemove }: { incidents: Incident[]; onRemove: (id: string) => void }) {
+function LogTab({
+  incidents,
+  onRemove,
+  onOpenMatch,
+}: {
+  incidents: Incident[];
+  onRemove: (id: string) => void;
+  onOpenMatch: (i: Incident) => void;
+}) {
   const [q, setQ] = useState("");
   const [type, setType] = useState<IncidentType | "all">("all");
   const ql = q.toLowerCase();
@@ -403,7 +416,9 @@ function LogTab({ incidents, onRemove }: { incidents: Incident[]; onRemove: (id:
           {incidents.length === 0 ? "Nothing logged yet." : "No matches for that filter."}
         </p>
       ) : (
-        filtered.map((i) => <IncidentRow key={i.id} incident={i} onRemove={onRemove} showTeam />)
+        filtered.map((i) => (
+          <IncidentRow key={i.id} incident={i} onRemove={onRemove} onOpenMatch={onOpenMatch} showTeam />
+        ))
       )}
     </div>
   );
@@ -414,161 +429,88 @@ function LogTab({ incidents, onRemove }: { incidents: Incident[]; onRemove: (id:
 function IncidentRow({
   incident: i,
   onRemove,
+  onOpenMatch,
   showTeam,
 }: {
   incident: Incident;
-  onRemove: (id: string) => void;
+  onRemove?: (id: string) => void;
+  onOpenMatch?: (i: Incident) => void;
   showTeam?: boolean;
 }) {
   return (
     <div className="rounded-lg border border-border bg-surface px-3 py-2">
-      <div className="flex items-start justify-between gap-2">
-        <span className="text-sm font-semibold">
-          {showTeam ? `${i.team} · ` : ""}
-          {i.matchName ?? "No match"}
-        </span>
-        <Badge tone={INCIDENT_TYPE_TONE[i.type]}>{INCIDENT_TYPE_LABELS[i.type]}</Badge>
-      </div>
-      {i.rules.length ? <div className="mt-1 text-xs font-medium text-foreground">{i.rules.join(", ")}</div> : null}
-      {i.note ? <p className="mt-0.5 text-sm text-muted-foreground">{i.note}</p> : null}
+      <button className="block w-full text-left" onClick={() => onOpenMatch?.(i)}>
+        <div className="flex items-start justify-between gap-2">
+          <span className="text-sm font-semibold">
+            {showTeam ? `${i.team} · ` : ""}
+            {i.matchName ?? "No match"}
+          </span>
+          <Badge tone={INCIDENT_TYPE_TONE[i.type]}>{INCIDENT_TYPE_LABELS[i.type]}</Badge>
+        </div>
+        {i.rules.length ? <div className="mt-1 text-xs font-medium text-foreground">{i.rules.join(", ")}</div> : null}
+        {i.note ? <p className="mt-0.5 text-sm text-muted-foreground">{i.note}</p> : null}
+      </button>
       <div className="mt-1 flex items-center justify-between">
         <span className="text-xs text-muted-foreground">by {i.author}</span>
-        <button onClick={() => onRemove(i.id)} className="text-xs text-danger hover:underline">
-          Remove
-        </button>
+        {onRemove ? (
+          <button onClick={() => onRemove(i.id)} className="text-xs text-danger hover:underline">
+            Remove
+          </button>
+        ) : null}
       </div>
     </div>
   );
 }
 
-function IncidentList({
-  title,
-  incidents,
-  onRemove,
-  showTeam,
-}: {
-  title: string;
-  incidents: Incident[];
-  onRemove: (id: string) => void;
-  showTeam?: boolean;
-}) {
-  return (
-    <div className="mt-5">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
-      <div className="mt-2 flex flex-col gap-2">
-        {incidents.map((i) => (
-          <IncidentRow key={i.id} incident={i} onRemove={onRemove} showTeam={showTeam} />
-        ))}
-      </div>
-    </div>
-  );
-}
+/* ------------------------------ Match sheet ------------------------------- */
 
-/* ------------------------------ Type pickers ------------------------------ */
+type TeamCfg = { state: "none" | "violation" | "note"; rules: string[]; note: string; dq: boolean };
+const EMPTY_CFG: TeamCfg = { state: "none", rules: [], note: "", dq: false };
 
-function TypeSelect({ value, onChange }: { value: IncidentType; onChange: (t: IncidentType) => void }) {
-  const active: Record<IncidentType, string> = {
-    dq: "bg-danger text-white",
-    violation: "bg-warning text-white",
-    note: "bg-primary text-primary-foreground",
-  };
-  return (
-    <div className="grid grid-cols-3 gap-1 rounded-lg border border-border p-1">
-      {INCIDENT_TYPES.map((t) => (
-        <button
-          key={t}
-          type="button"
-          onClick={() => onChange(t)}
-          className={cn(
-            "rounded-md px-2 py-1.5 text-sm font-medium transition",
-            value === t ? active[t] : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {INCIDENT_TYPE_SHORT[t]}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function TeamTypeSelect({
-  value,
-  accent,
-  onChange,
-}: {
-  value: IncidentType | null;
-  accent: Accent;
-  onChange: (t: IncidentType | null) => void;
-}) {
-  const opts: { key: IncidentType | null; label: string }[] = [
-    { key: null, label: "—" },
-    { key: "dq", label: "DQ" },
-    { key: "violation", label: "Viol" },
-    { key: "note", label: "Note" },
-  ];
-  const activeCls = accent === "red" ? "bg-danger text-white" : "bg-primary text-primary-foreground";
-  return (
-    <div className="flex gap-0.5 rounded-lg border border-border p-0.5">
-      {opts.map((o) => (
-        <button
-          key={String(o.key)}
-          type="button"
-          onClick={() => onChange(o.key)}
-          className={cn(
-            "rounded-md px-2 py-1 text-xs font-medium transition",
-            value === o.key ? activeCls : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/* -------------------------------- Sheets ---------------------------------- */
-
-type TeamConfig = { type: IncidentType | null; rules: string[]; note: string };
-
-function MatchFaultForm({
+function MatchSheet({
   match,
   program,
   division,
   author,
+  incidentsByTeam,
   onLogMany,
 }: {
   match: VexMatch;
   program: Program;
   division: string | null;
   author: string;
+  incidentsByTeam: Map<string, Incident[]>;
   onLogMany: (list: NewIncident[]) => void;
 }) {
   const teams = matchTeamsWithColor(match);
-  const [config, setConfig] = useState<Record<string, TeamConfig>>({});
+  const [config, setConfig] = useState<Record<string, TeamCfg>>({});
+  const [expanded, setExpanded] = useState<string | null>(teams[0]?.number ?? null);
   const [reviewing, setReviewing] = useState(false);
 
-  const get = (t: string): TeamConfig => config[t] ?? { type: null, rules: [], note: "" };
-  const set = (t: string, patch: Partial<TeamConfig>) =>
-    setConfig((c) => ({ ...c, [t]: { ...get(t), ...patch } }));
+  const get = (t: string): TeamCfg => config[t] ?? EMPTY_CFG;
+  const set = (t: string, patch: Partial<TeamCfg>) => setConfig((c) => ({ ...c, [t]: { ...get(t), ...patch } }));
 
   const pending: NewIncident[] = teams
-    .filter((t) => get(t.number).type !== null)
+    .filter((t) => get(t.number).state !== "none")
     .map((t) => {
       const cfg = get(t.number);
-      const type = cfg.type as IncidentType;
+      const type: IncidentType = cfg.state === "violation" ? (cfg.dq ? "dq" : "violation") : "note";
       return {
         type,
         team: t.number,
         matchName: match.name,
         matchId: match.id,
         division,
-        rules: requiresRule(type) ? cfg.rules : [],
+        rules: cfg.state === "violation" ? cfg.rules : [],
         note: cfg.note.trim(),
         author,
         authorId: null,
       };
     });
-  const invalid = pending.some((p) => requiresRule(p.type) && p.rules.length === 0);
+
+  const invalid =
+    pending.some((p) => (p.type === "violation" || p.type === "dq") && p.rules.length === 0) ||
+    pending.some((p) => p.type === "note" && !p.note);
 
   function confirm() {
     onLogMany(pending);
@@ -578,33 +520,100 @@ function MatchFaultForm({
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-xs text-muted-foreground">Mark faults for any teams in this match, then review and log together.</p>
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-semibold">{match.name}</h2>
+        <span className="text-xs text-muted-foreground">
+          {roundName(match.round)}
+          {match.field ? " · " + match.field : ""}
+        </span>
+      </div>
+
       {teams.map((t) => {
         const cfg = get(t.number);
-        const accent: Accent = t.color === "red" ? "red" : "blue";
-        const needsRule = cfg.type ? requiresRule(cfg.type) : false;
+        const accent = t.color === "red" ? "red" : "blue";
+        const isOpen = expanded === t.number;
+        const teamIncs = incidentsByTeam.get(t.number) ?? [];
+        const priorCounts = violationRuleCounts(teamIncs);
         return (
-          <div
-            key={t.number}
-            className={cn("rounded-lg border p-3", t.color === "red" ? "border-danger/30" : "border-primary/30")}
-          >
-            <div className="flex items-center justify-between gap-2">
+          <div key={t.number} className={cn("rounded-xl border", t.color === "red" ? "border-danger/30" : "border-primary/30")}>
+            <button
+              onClick={() => setExpanded(isOpen ? null : t.number)}
+              className="flex w-full items-center justify-between px-3 py-2.5"
+            >
               <span className={cn("font-semibold", t.color === "red" ? "text-danger" : "text-primary")}>{t.number}</span>
-              <TeamTypeSelect value={cfg.type} accent={accent} onChange={(type) => set(t.number, { type })} />
-            </div>
-            {cfg.type && needsRule ? (
-              <div className="mt-2">
-                <RuleSelect program={program} value={cfg.rules} onChange={(rules) => set(t.number, { rules })} accent={accent} />
+              <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                {cfg.state === "violation" ? (
+                  <Badge tone={cfg.dq ? "danger" : "warning"}>{cfg.dq ? "DQ" : "Violation"}{cfg.rules.length ? ` · ${cfg.rules.length}` : ""}</Badge>
+                ) : cfg.state === "note" ? (
+                  <Badge>Note</Badge>
+                ) : (
+                  <span>—</span>
+                )}
+                <svg className={cn("transition", isOpen ? "rotate-180" : "")} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6" /></svg>
+              </span>
+            </button>
+
+            {isOpen ? (
+              <div className="border-t border-border px-3 py-3">
+                <div className="grid grid-cols-3 gap-1 rounded-lg border border-border p-1">
+                  {(["none", "violation", "note"] as const).map((s) => {
+                    const activeCls = t.color === "red" ? "bg-danger text-white" : "bg-primary text-primary-foreground";
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => set(t.number, { state: s, dq: s === "violation" ? cfg.dq : false })}
+                        className={cn(
+                          "rounded-md px-2 py-1.5 text-sm font-medium transition",
+                          cfg.state === s ? activeCls : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {s === "none" ? "—" : s === "violation" ? "Violation" : "Note"}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {cfg.state === "violation" ? (
+                  <>
+                    <div className="mt-3">
+                      <RuleSelect
+                        program={program}
+                        value={cfg.rules}
+                        onChange={(rules) => set(t.number, { rules })}
+                        accent={accent}
+                        priorCounts={priorCounts}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => set(t.number, { dq: !cfg.dq })}
+                      className={cn(
+                        "mt-3 w-full rounded-lg border py-2.5 text-sm font-semibold transition",
+                        cfg.dq ? "border-danger bg-danger text-white" : "border-danger/50 text-danger hover:bg-danger/10",
+                      )}
+                    >
+                      {cfg.dq ? "Disqualified — tap to undo" : "Mark Disqualification"}
+                    </button>
+                  </>
+                ) : null}
+
+                {cfg.state !== "none" ? (
+                  <div className="mt-3">
+                    <textarea
+                      value={cfg.note}
+                      onChange={(e) => set(t.number, { note: e.target.value.slice(0, 200) })}
+                      rows={2}
+                      maxLength={200}
+                      placeholder={cfg.state === "note" ? "What happened? (no rule)" : "Note (optional)"}
+                      className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary"
+                    />
+                    <div className="mt-0.5 text-right text-[11px] text-muted-foreground">{cfg.note.length}/200</div>
+                  </div>
+                ) : null}
+
+                {teamIncs.length > 0 ? <TeamRunningLog incidents={teamIncs} /> : null}
               </div>
-            ) : null}
-            {cfg.type ? (
-              <textarea
-                value={cfg.note}
-                onChange={(e) => set(t.number, { note: e.target.value })}
-                rows={2}
-                placeholder="Note (optional)"
-                className="mt-2 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary"
-              />
             ) : null}
           </div>
         );
@@ -613,12 +622,12 @@ function MatchFaultForm({
       <Button onClick={() => setReviewing(true)} disabled={pending.length === 0 || invalid}>
         Review &amp; log{pending.length > 0 ? ` (${pending.length})` : ""}
       </Button>
-      {invalid ? <p className="text-xs text-danger">DQ / Violation entries need at least one rule cited.</p> : null}
+      {invalid ? (
+        <p className="text-xs text-danger">Violations/DQs need ≥1 rule; notes need text.</p>
+      ) : null}
 
       <Modal open={reviewing} onClose={() => setReviewing(false)}>
-        <h2 className="text-sm font-semibold">
-          Confirm {pending.length} entr{pending.length === 1 ? "y" : "ies"} for {match.name}
-        </h2>
+        <h2 className="text-sm font-semibold">Confirm {pending.length} for {match.name}</h2>
         <div className="mt-3 flex flex-col gap-2">
           {pending.map((p, idx) => (
             <div key={idx} className="rounded-lg bg-surface-muted px-3 py-2 text-sm">
@@ -632,190 +641,47 @@ function MatchFaultForm({
           ))}
         </div>
         <div className="mt-4 flex gap-2">
-          <Button variant="secondary" className="flex-1" onClick={() => setReviewing(false)}>
-            Back
-          </Button>
-          <Button className="flex-1" onClick={confirm}>
-            Log all
-          </Button>
+          <Button variant="secondary" className="flex-1" onClick={() => setReviewing(false)}>Back</Button>
+          <Button className="flex-1" onClick={confirm}>Log all</Button>
         </div>
       </Modal>
     </div>
   );
 }
 
-function MatchSheet({
-  match,
-  program,
-  division,
-  author,
-  incidents,
-  onLogMany,
-  onRemove,
-}: {
-  match: VexMatch;
-  program: Program;
-  division: string | null;
-  author: string;
-  incidents: Incident[];
-  onLogMany: (list: NewIncident[]) => void;
-  onRemove: (id: string) => void;
-}) {
+function TeamRunningLog({ incidents }: { incidents: Incident[] }) {
   return (
-    <div>
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold">{match.name}</h2>
-        <span className="text-xs text-muted-foreground">
-          {roundName(match.round)}
-          {match.field ? " · " + match.field : ""}
-        </span>
+    <div className="mt-3">
+      <h4 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">History</h4>
+      <div className="mt-1 flex flex-col gap-1">
+        {incidents.map((i) => (
+          <div key={i.id} className="flex items-center justify-between gap-2 text-xs">
+            <span className="min-w-0 truncate">
+              <span className="font-medium">{i.matchName ?? "—"}</span>
+              {" · "}
+              {INCIDENT_TYPE_SHORT[i.type]}
+              {i.rules.length ? ` ${i.rules.join(",")}` : ""}
+              {i.note ? ` · ${i.note.slice(0, 40)}${i.note.length > 40 ? "…" : ""}` : ""}
+            </span>
+            <span className="shrink-0 text-muted-foreground">{i.author}</span>
+          </div>
+        ))}
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-        <AllianceLine color="red" teams={match.alliances.find((a) => a.color === "red")?.teams.map((t) => t.team.name) ?? []} />
-        <AllianceLine color="blue" teams={match.alliances.find((a) => a.color === "blue")?.teams.map((t) => t.team.name) ?? []} />
-      </div>
-      <div className="mt-4">
-        <MatchFaultForm match={match} program={program} division={division} author={author} onLogMany={onLogMany} />
-      </div>
-      {incidents.length > 0 ? <IncidentList title="This match" incidents={incidents} onRemove={onRemove} showTeam /> : null}
     </div>
   );
 }
 
-function IncidentForm({
-  program,
-  teamOptions,
-  fixedTeam,
-  division,
-  matchOptions,
-  author,
-  onAdd,
-}: {
-  program: Program;
-  teamOptions: string[];
-  fixedTeam?: string;
-  division: string | null;
-  matchOptions?: VexMatch[];
-  author: string;
-  onAdd: (i: NewIncident) => void;
-}) {
-  const [type, setType] = useState<IncidentType>("violation");
-  const [team, setTeam] = useState(fixedTeam ?? teamOptions[0] ?? "");
-  const [rules, setRules] = useState<string[]>([]);
-  const [note, setNote] = useState("");
-  const [matchKey, setMatchKey] = useState("");
-
-  const selectedMatch = matchOptions?.find((m) => String(m.id) === matchKey) ?? null;
-  const needsRule = requiresRule(type);
-  const dqNeedsMatch = type === "dq" && !selectedMatch;
-  const canSubmit = team.trim() !== "" && (!needsRule || rules.length > 0) && !dqNeedsMatch;
-
-  function submit() {
-    if (!canSubmit) return;
-    onAdd({
-      type,
-      team: team.trim(),
-      matchName: selectedMatch?.name ?? null,
-      matchId: selectedMatch?.id ?? null,
-      division,
-      rules: needsRule ? rules : [],
-      note: note.trim(),
-      author,
-      authorId: null,
-    });
-    setRules([]);
-    setNote("");
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <TypeSelect value={type} onChange={setType} />
-
-      {matchOptions ? (
-        <div>
-          <label className="text-xs font-medium text-muted-foreground">Match</label>
-          <select
-            value={matchKey}
-            onChange={(e) => setMatchKey(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
-          >
-            <option value="">General (no match)</option>
-            {matchOptions.map((m) => (
-              <option key={m.id} value={String(m.id)}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-          {dqNeedsMatch ? <p className="mt-1 text-xs text-danger">A DQ must be tied to a match.</p> : null}
-        </div>
-      ) : null}
-
-      {!fixedTeam && teamOptions.length > 1 ? (
-        <div>
-          <label className="text-xs font-medium text-muted-foreground">Team</label>
-          <div className="mt-1 flex flex-wrap gap-1.5">
-            {teamOptions.map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTeam(t)}
-                className={cn(
-                  "rounded-full border px-3 py-1 text-sm transition",
-                  team === t ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground hover:bg-surface-muted",
-                )}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {needsRule ? (
-        <div>
-          <label className="text-xs font-medium text-muted-foreground">Rule(s) cited (required)</label>
-          <div className="mt-1">
-            <RuleSelect program={program} value={rules} onChange={setRules} />
-          </div>
-        </div>
-      ) : null}
-
-      <div>
-        <label className="text-xs font-medium text-muted-foreground">{needsRule ? "Note (optional)" : "Note"}</label>
-        <textarea
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          rows={2}
-          placeholder={needsRule ? "Extra detail (optional)" : "What happened?"}
-          className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary"
-        />
-      </div>
-
-      <Button onClick={submit} disabled={!canSubmit}>
-        Log {INCIDENT_TYPE_SHORT[type]}
-        {team ? ` · ${team}` : ""}
-      </Button>
-    </div>
-  );
-}
+/* ------------------------------- Team sheet ------------------------------- */
 
 function TeamSheet({
   team,
-  program,
-  division,
-  author,
-  matches,
   incidents,
-  onAdd,
+  onOpenMatch,
   onRemove,
 }: {
   team: { number: string; name: string };
-  program: Program;
-  division: string | null;
-  author: string;
-  matches: VexMatch[];
   incidents: Incident[];
-  onAdd: (i: NewIncident) => void;
+  onOpenMatch: (i: Incident) => void;
   onRemove: (id: string) => void;
 }) {
   return (
@@ -824,19 +690,16 @@ function TeamSheet({
         <h2 className="text-base font-semibold">{team.number}</h2>
         <span className="text-xs text-muted-foreground">{team.name}</span>
       </div>
-      <p className="mt-1 text-xs text-muted-foreground">Tie this entry to a match, or log it as general. A DQ requires a match.</p>
-      <div className="mt-3">
-        <IncidentForm
-          program={program}
-          teamOptions={[team.number]}
-          fixedTeam={team.number}
-          division={division}
-          matchOptions={matches}
-          author={author}
-          onAdd={onAdd}
-        />
+      <p className="mt-1 text-xs text-muted-foreground">
+        Log of DQs, violations, and notes. Tap an entry to open its match.
+      </p>
+      <div className="mt-3 flex flex-col gap-2">
+        {incidents.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">No entries for this team yet.</p>
+        ) : (
+          incidents.map((i) => <IncidentRow key={i.id} incident={i} onOpenMatch={onOpenMatch} onRemove={onRemove} />)
+        )}
       </div>
-      {incidents.length > 0 ? <IncidentList title={`All entries for ${team.number}`} incidents={incidents} onRemove={onRemove} /> : null}
     </div>
   );
 }

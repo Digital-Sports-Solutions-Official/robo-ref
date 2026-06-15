@@ -9,8 +9,6 @@ import { SessionScreen } from "@/components/session-screen";
 import { useIdentity } from "@/components/identity-provider";
 import { getEventBySku } from "@/lib/vex/client";
 import { useMembers, useOnlineSession, type Member } from "@/lib/online-session";
-import { writeLocalIncidents } from "@/lib/local-session";
-import { recordRecent } from "@/lib/recents";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 interface SessionRow {
@@ -60,13 +58,6 @@ export default function OnlineSessionPage() {
 
   const store = useOnlineSession(id, session?.code ?? null, approved);
 
-  function duplicateLocal() {
-    if (!session || !event) return;
-    writeLocalIncidents(session.event_sku, store.incidents);
-    recordRecent({ sku: session.event_sku, name: event.name, city: event.location?.city ?? null });
-    router.push(`/events/${encodeURIComponent(session.event_sku)}`);
-  }
-
   async function deleteOrLeave() {
     const supabase = getSupabaseBrowserClient();
     if (supabase && userId && session) {
@@ -100,7 +91,6 @@ export default function OnlineSessionPage() {
     );
   }
 
-  // Joined but not yet approved by the host.
   if (!approved) {
     return (
       <div className="mx-auto max-w-md">
@@ -142,7 +132,6 @@ export default function OnlineSessionPage() {
           members={members}
           onApprove={approve}
           onRemoveMember={removeMember}
-          onDuplicate={duplicateLocal}
           onDelete={deleteOrLeave}
         />
       }
@@ -157,7 +146,6 @@ function SessionMenu({
   members,
   onApprove,
   onRemoveMember,
-  onDuplicate,
   onDelete,
 }: {
   code: string;
@@ -166,7 +154,6 @@ function SessionMenu({
   members: Member[];
   onApprove: (uid: string) => void;
   onRemoveMember: (uid: string) => void;
-  onDuplicate: () => void;
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -245,10 +232,7 @@ function SessionMenu({
         ) : null}
 
         <div className="my-3 border-t border-border" />
-        <Button variant="outline" className="w-full" onClick={() => { setOpen(false); onDuplicate(); }}>
-          Duplicate as local copy
-        </Button>
-        <Button variant="danger" className="mt-2 w-full" onClick={() => setConfirmDelete(true)}>
+        <Button variant="danger" className="w-full" onClick={() => setConfirmDelete(true)}>
           {isOwner ? "Delete session" : "Leave session"}
         </Button>
       </Modal>
