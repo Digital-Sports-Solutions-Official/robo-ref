@@ -6,17 +6,17 @@ import { useIdentity } from "@/components/identity-provider";
 import { RecentSessions } from "@/components/recent-sessions";
 
 const GREETINGS: ((n: string) => string)[] = [
-  (n) => `Welcome back, ${n}.`,
-  (n) => `Good to see you, ${n}.`,
+  (n) => `Welcome back, ${n}!`,
+  (n) => `Good to see you, ${n}!`,
   (n) => `Ready to ref, ${n}?`,
   (n) => `Missed you, ${n}!`,
-  (n) => `Let's call some matches, ${n}.`,
+  (n) => `Let's call some matches, ${n}!`,
   (n) => `Eyes on the field, ${n}.`,
   () => `Auton in 3, 2, 1...`,
   () => `Driver Control in 3, 2, 1...`,
-  (n) => `Back in action, ${n}.`,
+  (n) => `Back in action, ${n}!`,
   () => `Remember, Team Experience!`,
-  (n) => `Howdy, ${n}.`,
+  (n) => `Howdy, ${n}!`,
 ];
 
 function RoboRefMark({ className }: { className?: string }) {
