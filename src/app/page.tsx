@@ -17,6 +17,7 @@ const GREETINGS: ((n: string) => string)[] = [
   (n) => `Back in action, ${n}!`,
   () => `Remember, Team Experience!`,
   (n) => `Howdy, ${n}!`,
+  (n) => `Let's go! It's, ${n}!`,
 ];
 
 function RoboRefMark({ className }: { className?: string }) {
@@ -132,8 +133,4 @@ export default function HomePage() {
       <RecentSessions />
 
       <p className="mt-auto pt-10 text-center text-xs text-muted-foreground">
-        Your log is stored on this device until you share it
-      </p>
-    </main>
-  );
-}
+        Your log is stored on this device until you share

@@ -266,6 +266,62 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
+function DivisionMenu({
+  divisions,
+  activeId,
+  onSelect,
+}: {
+  divisions: VexDivision[];
+  activeId: number | null;
+  onSelect: (id: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const active = divisions.find((d) => d.id === activeId);
+  return (
+    <div className="relative">
+      <Button variant="ghost" className="gap-1 px-2 py-1 text-xs" onClick={() => setOpen((o) => !o)}>
+        {active?.name ?? "Division"}
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={cn("transition-transform", open ? "rotate-180" : "")}
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </Button>
+      {open ? (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 z-50 mt-1 min-w-44 overflow-hidden rounded-lg border border-border bg-surface shadow-lg">
+            {divisions.map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => {
+                  onSelect(d.id);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "block w-full px-3 py-2 text-left text-xs transition hover:bg-surface-muted",
+                  d.id === activeId ? "font-semibold text-primary" : "text-foreground",
+                )}
+              >
+                {d.name}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 function MatchesTab({
   query,
   divisions,
@@ -294,17 +350,7 @@ function MatchesTab({
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
         {divisions.length > 1 ? (
-          <select
-            value={activeDivision ?? ""}
-            onChange={(e) => onDivision(Number(e.target.value))}
-            className="rounded-md border border-border bg-surface px-2 py-1 text-xs font-medium outline-none focus:border-primary"
-          >
-            {divisions.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
+          <DivisionMenu divisions={divisions} activeId={activeDivision} onSelect={onDivision} />
         ) : (
           <span className="text-xs text-muted-foreground">{divisions[0]?.name ?? "Matches"}</span>
         )}
@@ -450,20 +496,34 @@ function TeamsTab({
         filtered.map((t) => {
           const list = incidentsByTeam.get(t.number) ?? [];
           const dq = new Set(list.filter((i) => i.type === "dq").map((i) => i.matchName ?? "—")).size;
+          const ruleList = list.filter((i) => i.type === "dq" || i.type === "violation").flatMap((i) => i.rules);
+          const rulesSummary = ruleList.length ? formatRules(ruleList) : "";
           return (
             <button
               key={t.id}
               onClick={() => onOpen(t.number, t.team_name ?? "")}
-              className="flex items-center justify-between rounded-xl border border-border bg-surface p-3 text-left transition hover:border-primary"
+              className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface p-3 text-left transition hover:border-primary"
             >
-              <span>
-                <span className="font-semibold">{t.number}</span>
-                <span className="ml-2 text-sm text-muted-foreground">{t.team_name}</span>
+              <span className="min-w-0">
+                <span className="block">
+                  <span className="font-semibold">{t.number}</span>
+                  <span className="ml-2 text-sm text-muted-foreground">{t.team_name}</span>
+                </span>
+                {dq > 0 || rulesSummary ? (
+                  <span className="mt-0.5 block text-xs">
+                    {dq > 0 ? (
+                      <span className="font-semibold text-danger underline">DQ{dq > 1 ? ` ×${dq}` : ""}</span>
+                    ) : null}
+                    {dq > 0 && rulesSummary ? <span className="text-muted-foreground"> | </span> : null}
+                    {rulesSummary ? <span className="text-muted-foreground">{rulesSummary}</span> : null}
+                  </span>
+                ) : null}
               </span>
-              <span className="flex items-center gap-1.5">
-                {dq > 0 ? <Badge tone="danger">{dq} DQ</Badge> : null}
-                {list.length > 0 ? <Badge tone="warning">{list.length}</Badge> : null}
-              </span>
+              {list.length > 0 ? (
+                <Badge tone={dq > 0 ? "danger" : "warning"} className="shrink-0">
+                  {list.length}
+                </Badge>
+              ) : null}
             </button>
           );
         })
@@ -744,7 +804,6 @@ function MatchSheet({
 
       {teams.map((t) => {
         const cfg = get(config, t.number);
-        const accent = t.color === "red" ? "red" : "blue";
         const isOpen = expanded === t.number;
         return (
           <div key={t.number} className={cn("overflow-hidden rounded-xl border", t.color === "red" ? "border-danger/30" : "border-primary/30")}>
@@ -792,7 +851,7 @@ function MatchSheet({
                 {cfg.state === "violation" ? (
                   <>
                     <div className="mt-3">
-                      <RuleSelect program={program} value={cfg.rules} onChange={(rules) => set(t.number, { rules })} accent={accent} priorCounts={priorCountsFor(t.number)} />
+                      <RuleSelect program={program} value={cfg.rules} onChange={(rules) => set(t.number, { rules })} priorCounts={priorCountsFor(t.number)} />
                     </div>
                     <button
                       type="button"
