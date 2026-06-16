@@ -48,7 +48,7 @@ export default function AdminPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">robo-ref admin</h1>
+        <h1 className="text-2xl font-bold tracking-tight">RoboRef admin</h1>
         <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
           ← App
         </Link>
@@ -136,7 +136,7 @@ function LoginForm({ onDone }: { onDone: () => void }) {
 }
 
 function Dashboard({ email, onSignOut }: { email: string; onSignOut: () => void }) {
-  const [tab, setTab] = useState<"sessions" | "admins" | "rules">("sessions");
+  const [tab, setTab] = useState<"usage" | "sessions" | "admins" | "rules">("usage");
   return (
     <div>
       <div className="flex items-center justify-between">
@@ -147,13 +147,13 @@ function Dashboard({ email, onSignOut }: { email: string; onSignOut: () => void 
           Sign out
         </Button>
       </div>
-      <nav className="mt-4 flex gap-1 rounded-lg border border-border p-1 text-sm">
-        {(["sessions", "admins", "rules"] as const).map((t) => (
+      <nav className="mt-4 grid grid-cols-4 gap-1 rounded-lg border border-border p-1 text-sm">
+        {(["usage", "sessions", "admins", "rules"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={cn(
-              "flex-1 rounded-md px-3 py-1.5 font-medium capitalize transition",
+              "rounded-md px-2 py-1.5 font-medium capitalize transition",
               tab === t ? "bg-surface-muted text-foreground" : "text-muted-foreground hover:text-foreground",
             )}
           >
@@ -162,11 +162,153 @@ function Dashboard({ email, onSignOut }: { email: string; onSignOut: () => void 
         ))}
       </nav>
       <div className="mt-4">
-        {tab === "sessions" ? <SessionsPanel /> : tab === "admins" ? <AdminsPanel currentEmail={email} /> : <RulesPanel />}
+        {tab === "usage" ? (
+          <UsagePanel />
+        ) : tab === "sessions" ? (
+          <SessionsPanel />
+        ) : tab === "admins" ? (
+          <AdminsPanel currentEmail={email} />
+        ) : (
+          <RulesPanel />
+        )}
       </div>
     </div>
   );
 }
+
+/* --------------------------------- Usage ---------------------------------- */
+
+interface UsageStats {
+  sessions: number;
+  incidents: number;
+  photos: number;
+  members: number;
+  admins: number;
+  db_bytes: number;
+  storage_bytes: number;
+  photo_bytes: number;
+}
+
+const FREE_STORAGE = 1024 ** 3; // 1 GB
+const FREE_DB = 500 * 1024 ** 2; // 500 MB
+const PROJECT_REF = "lvcqgsbgyikhdqgtiboz";
+
+function fmtBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 ** 2) return `${(n / 1024).toFixed(0)} KB`;
+  if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MB`;
+  return `${(n / 1024 ** 3).toFixed(2)} GB`;
+}
+
+function Meter({ label, used, limit }: { label: string; used: number; limit: number }) {
+  const pct = Math.min(100, Math.round((used / limit) * 100));
+  const tone = pct >= 90 ? "bg-danger" : pct >= 70 ? "bg-warning" : "bg-primary";
+  return (
+    <div>
+      <div className="flex items-baseline justify-between text-sm">
+        <span className="font-medium">{label}</span>
+        <span className="text-xs text-muted-foreground">
+          {fmtBytes(used)} / {fmtBytes(limit)} · {pct}%
+        </span>
+      </div>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-surface-muted">
+        <div className={cn("h-full rounded-full transition-all", tone)} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-lg border border-border bg-surface px-3 py-2">
+      <div className="text-lg font-semibold">{value}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+    </div>
+  );
+}
+
+function UsagePanel() {
+  const q = useQuery({
+    queryKey: ["admin-usage"],
+    queryFn: async (): Promise<UsageStats | null> => {
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) return null;
+      const { data, error } = await supabase.rpc("admin_usage_stats");
+      if (error) throw error;
+      return data as UsageStats;
+    },
+  });
+
+  if (q.isLoading)
+    return (
+      <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+        <Spinner /> Loading usage…
+      </div>
+    );
+  if (q.isError)
+    return (
+      <Card>
+        <p className="text-sm text-danger">{(q.error as Error).message}</p>
+      </Card>
+    );
+  const u = q.data;
+  if (!u)
+    return (
+      <Card>
+        <p className="text-sm text-muted-foreground">Supabase isn&apos;t configured.</p>
+      </Card>
+    );
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold">Free-tier usage</h3>
+          <button onClick={() => q.refetch()} className="text-xs text-primary hover:underline">
+            Refresh
+          </button>
+        </div>
+        <div className="mt-3 flex flex-col gap-3">
+          <Meter label="File storage" used={u.storage_bytes} limit={FREE_STORAGE} />
+          <Meter label="Database" used={u.db_bytes} limit={FREE_DB} />
+        </div>
+        <p className="mt-3 text-[11px] text-muted-foreground">
+          Free plan: 1 GB file storage, 500 MB database. Projects pause after ~1 week of inactivity.
+        </p>
+      </Card>
+
+      <Card>
+        <h3 className="text-sm font-semibold">Activity</h3>
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          <Stat label="Sessions" value={u.sessions} />
+          <Stat label="Entries" value={u.incidents} />
+          <Stat label="Photos" value={u.photos} />
+          <Stat label="Members" value={u.members} />
+          <Stat label="Admins" value={u.admins} />
+          <Stat label="Photo data" value={fmtBytes(u.photo_bytes)} />
+        </div>
+      </Card>
+
+      <Card>
+        <h3 className="text-sm font-semibold">Bandwidth / egress</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Egress isn&apos;t available from the API, so it isn&apos;t shown here. The free plan includes 5 GB cached + 5 GB
+          uncached per month, shared across database, auth, realtime, and storage.
+        </p>
+        <a
+          href={`https://supabase.com/dashboard/project/${PROJECT_REF}/usage`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 inline-block text-xs text-primary hover:underline"
+        >
+          Open the Supabase usage dashboard →
+        </a>
+      </Card>
+    </div>
+  );
+}
+
+/* -------------------------------- Sessions -------------------------------- */
 
 function formatAge(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -206,7 +348,12 @@ function SessionsPanel() {
     q.refetch();
   }
 
-  if (q.isLoading) return <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground"><Spinner /> Loading…</div>;
+  if (q.isLoading)
+    return (
+      <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+        <Spinner /> Loading…
+      </div>
+    );
   const sessions = q.data ?? [];
 
   return (
@@ -217,7 +364,8 @@ function SessionsPanel() {
           <div className="min-w-0">
             <div className="truncate text-sm font-medium">{s.event_name ?? s.event_sku}</div>
             <div className="text-xs text-muted-foreground">
-              <span className="font-mono">{s.code}</span> · {formatAge(s.created_at)} old · {s.member_count} members · {s.incident_count} entries
+              <span className="font-mono">{s.code}</span> · {formatAge(s.created_at)} old · {s.member_count} members ·{" "}
+              {s.incident_count} entries
             </div>
           </div>
           <Button variant="danger" className="px-3 py-1.5 text-xs" onClick={() => del(s.id)}>
@@ -229,6 +377,8 @@ function SessionsPanel() {
     </div>
   );
 }
+
+/* --------------------------------- Admins --------------------------------- */
 
 interface AdminRow {
   email: string;
@@ -302,11 +452,14 @@ function AdminsPanel({ currentEmail }: { currentEmail: string }) {
   );
 }
 
+/* ---------------------------------- Rules --------------------------------- */
+
 function RulesPanel() {
   const [doc, setDoc] = useState<RulesDoc | null>(null);
   const [program, setProgram] = useState<Program>("V5RC");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [open, setOpen] = useState<Record<string, boolean>>({});
 
   async function load() {
     const supabase = getSupabaseBrowserClient();
@@ -339,100 +492,131 @@ function RulesPanel() {
     if (!supabase) return;
     setSaving(true);
     setMsg(null);
-    const { error } = await supabase
-      .from("app_config")
-      .upsert({ key: "rules", value: doc, updated_at: new Date().toISOString() });
+    const { error } = await supabase.from("app_config").upsert({ key: "rules", value: doc, updated_at: new Date().toISOString() });
     setMsg(error ? error.message : "Saved. Referees pick up changes on their next load.");
     setSaving(false);
   }
 
-  if (!doc) return <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground"><Spinner /> Loading…</div>;
+  if (!doc)
+    return (
+      <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+        <Spinner /> Loading…
+      </div>
+    );
   const cats = doc.programs[program]?.categories ?? [];
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex gap-1 rounded-lg border border-border p-1 text-sm">
-          {(["V5RC", "VEXU", "VIQRC"] as const).map((p) => (
-            <button
-              key={p}
-              onClick={() => setProgram(p)}
-              className={cn(
-                "rounded-md px-3 py-1 font-medium transition",
-                program === p ? "bg-surface-muted text-foreground" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
-        <Button onClick={save} disabled={saving}>
-          {saving ? "Saving…" : "Publish"}
-        </Button>
-      </div>
-      {msg ? <p className="text-xs text-muted-foreground">{msg}</p> : null}
-
-      {cats.map((cat, ci) => (
-        <Card key={cat.code} className="p-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold">
-              {cat.label} <span className="text-xs font-normal text-muted-foreground">({cat.code})</span>
-            </h3>
-            <button
-              onClick={() => {
-                const id = window.prompt(`New ${cat.code} rule id (e.g. ${cat.code}99)`)?.trim();
-                if (!id) return;
-                mutate((d) => {
-                  d.programs[program].categories[ci].rules.push({ id, title: "", description: "" });
-                });
-              }}
-              className="text-xs text-primary hover:underline"
-            >
-              + Add rule
-            </button>
-          </div>
-          <div className="mt-2 flex flex-col gap-2">
-            {cat.rules.map((r, ri) => (
-              <div key={ri} className="rounded-lg border border-border p-2">
-                <div className="flex items-center gap-2">
-                  <span className="w-14 shrink-0 font-mono text-xs font-semibold">{r.id}</span>
-                  <Input
-                    className="py-1 text-sm"
-                    value={r.title}
-                    onChange={(e) =>
-                      mutate((d) => {
-                        d.programs[program].categories[ci].rules[ri].title = e.target.value;
-                      })
-                    }
-                    placeholder="Title"
-                  />
-                  <button
-                    onClick={() =>
-                      mutate((d) => {
-                        d.programs[program].categories[ci].rules.splice(ri, 1);
-                      })
-                    }
-                    className="shrink-0 text-xs text-danger hover:underline"
-                  >
-                    Delete
-                  </button>
-                </div>
-                <textarea
-                  value={r.description}
-                  onChange={(e) =>
-                    mutate((d) => {
-                      d.programs[program].categories[ci].rules[ri].description = e.target.value;
-                    })
-                  }
-                  rows={2}
-                  placeholder="Description (shown on long-press)"
-                  className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-xs outline-none focus:border-primary"
-                />
-              </div>
+      <div className="sticky top-0 z-10 -mx-1 flex flex-col gap-2 bg-background/90 px-1 py-2 backdrop-blur">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex gap-1 rounded-lg border border-border p-1 text-sm">
+            {(["V5RC", "VEXU", "VIQRC"] as const).map((p) => (
+              <button
+                key={p}
+                onClick={() => setProgram(p)}
+                className={cn(
+                  "rounded-md px-3 py-1.5 font-medium transition",
+                  program === p ? "bg-surface-muted text-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {p}
+              </button>
             ))}
           </div>
-        </Card>
-      ))}
+          <Button onClick={save} disabled={saving} className="px-4 py-1.5 text-sm">
+            {saving ? "Saving…" : "Publish"}
+          </Button>
+        </div>
+        {msg ? <p className="text-xs text-muted-foreground">{msg}</p> : null}
+      </div>
+
+      {cats.map((cat, ci) => {
+        const isOpen = open[cat.code] ?? false;
+        return (
+          <div key={cat.code} className="overflow-hidden rounded-xl border border-border bg-surface">
+            <button
+              onClick={() => setOpen((o) => ({ ...o, [cat.code]: !isOpen }))}
+              className="flex w-full items-center justify-between px-3 py-3 text-left"
+            >
+              <span className="text-sm font-semibold">
+                {cat.label}{" "}
+                <span className="ml-1 text-xs font-normal text-muted-foreground">
+                  ({cat.code} · {cat.rules.length})
+                </span>
+              </span>
+              <svg
+                className={cn("shrink-0 transition-transform", isOpen ? "rotate-180" : "")}
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+            {isOpen ? (
+              <div className="flex flex-col gap-3 border-t border-border p-3">
+                {cat.rules.map((r, ri) => (
+                  <div key={ri} className="rounded-lg border border-border p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="rounded-md bg-surface-muted px-2 py-0.5 font-mono text-xs font-semibold">{r.id}</span>
+                      <button
+                        onClick={() =>
+                          mutate((d) => {
+                            d.programs[program].categories[ci].rules.splice(ri, 1);
+                          })
+                        }
+                        aria-label={`Delete ${r.id}`}
+                        className="inline-flex size-8 items-center justify-center rounded-md text-danger transition hover:bg-danger/10"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                        </svg>
+                      </button>
+                    </div>
+                    <Input
+                      className="mt-2 py-2 text-sm"
+                      value={r.title}
+                      onChange={(e) =>
+                        mutate((d) => {
+                          d.programs[program].categories[ci].rules[ri].title = e.target.value;
+                        })
+                      }
+                      placeholder="Title"
+                    />
+                    <textarea
+                      value={r.description}
+                      onChange={(e) =>
+                        mutate((d) => {
+                          d.programs[program].categories[ci].rules[ri].description = e.target.value;
+                        })
+                      }
+                      rows={3}
+                      placeholder="Description (shown on long-press)"
+                      className="mt-2 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
+                    />
+                  </div>
+                ))}
+                <button
+                  onClick={() => {
+                    const id = window.prompt(`New ${cat.code} rule id (e.g. ${cat.code}99)`)?.trim();
+                    if (!id) return;
+                    mutate((d) => {
+                      d.programs[program].categories[ci].rules.push({ id, title: "", description: "" });
+                    });
+                    setOpen((o) => ({ ...o, [cat.code]: true }));
+                  }}
+                  className="rounded-lg border border-dashed border-border py-2 text-sm font-medium text-primary transition hover:bg-surface-muted"
+                >
+                  + Add rule
+                </button>
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
     </div>
   );
 }
