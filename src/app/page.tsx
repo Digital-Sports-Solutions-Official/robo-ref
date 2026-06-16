@@ -17,6 +17,7 @@ const GREETINGS: ((n: string) => string)[] = [
   (n) => `Back in action, ${n}!`,
   () => `Remember, Team Experience!`,
   (n) => `Howdy, ${n}!`,
+  (n) => `Let's go! It's, ${n}!`,
 ];
 
 function RoboRefMark({ className }: { className?: string }) {

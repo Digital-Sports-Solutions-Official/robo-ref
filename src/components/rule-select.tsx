@@ -6,26 +6,16 @@ import type { Program, Rule } from "@/lib/vex/rules";
 import { useRules } from "@/lib/vex/use-rules";
 import { cn } from "@/lib/utils";
 
-type Accent = "primary" | "red" | "blue";
-
-const accentActive: Record<Accent, string> = {
-  primary: "border-primary bg-primary/10 text-primary",
-  red: "border-danger bg-danger/15 text-danger",
-  blue: "border-primary bg-primary/15 text-primary",
-};
-
 function RuleChip({
   rule,
   current,
   prior,
-  accent,
   onToggle,
   onDescribe,
 }: {
   rule: Rule;
   current: number;
   prior: number;
-  accent: Accent;
   onToggle: () => void;
   onDescribe: () => void;
 }) {
@@ -51,7 +41,6 @@ function RuleChip({
   }
 
   const total = prior + current;
-  const active = current > 0;
   return (
     <button
       type="button"
@@ -63,9 +52,11 @@ function RuleChip({
       title={rule.title}
       className={cn(
         "select-none rounded-md border px-2 py-1 text-xs font-medium transition",
-        active
-          ? accentActive[accent]
-          : total > 0
+        current > 0
+          ? prior > 0
+            ? "border-orange-500 bg-orange-500/20 text-orange-600 dark:border-orange-400 dark:text-orange-400"
+            : "border-warning bg-warning/20 text-warning"
+          : prior > 0
             ? "border-warning bg-warning/15 text-warning"
             : "border-border text-foreground hover:bg-surface-muted",
       )}
@@ -80,13 +71,11 @@ export function RuleSelect({
   program,
   value,
   onChange,
-  accent = "primary",
   priorCounts,
 }: {
   program: Program;
   value: Record<string, number>;
   onChange: (next: Record<string, number>) => void;
-  accent?: Accent;
   priorCounts?: Record<string, number>;
 }) {
   const [describe, setDescribe] = useState<Rule | null>(null);
@@ -107,7 +96,7 @@ export function RuleSelect({
     <div className="flex flex-col gap-2">
       <div className="flex max-h-56 flex-col gap-3 overflow-y-auto pr-1">
         <p className="text-[11px] text-muted-foreground">
-          Tap to cite a rule. Press &amp; hold for its description and a multi-count. Yellow = prior count for this team.
+          Tap to cite a rule. Press &amp; hold for its description and a multi-count. Yellow = prior count for this team; orange = added on top of a prior.
         </p>
         {categories.map((cat) => (
           <div key={cat.code}>
@@ -119,7 +108,6 @@ export function RuleSelect({
                   rule={r}
                   current={value[r.id] ?? 0}
                   prior={priorCounts?.[r.id] ?? 0}
-                  accent={accent}
                   onToggle={() => toggle(r.id)}
                   onDescribe={() => setDescribe(r)}
                 />

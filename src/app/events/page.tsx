@@ -1,18 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
 import { Button, Input, Spinner } from "@/components/ui";
 import { searchEvents, type EventSearchParams } from "@/lib/vex/client";
 import { formatEventDates } from "@/lib/utils";
 
+type SearchState = { term: string; from: string; to: string; submitted: EventSearchParams | null };
+// Module-scoped cache survives client-side navigation (into an event and back).
+let searchCache: SearchState = { term: "", from: "", to: "", submitted: null };
+
 export default function EventsSearchPage() {
-  const [term, setTerm] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const [submitted, setSubmitted] = useState<EventSearchParams | null>(null);
+  const [term, setTerm] = useState(searchCache.term);
+  const [from, setFrom] = useState(searchCache.from);
+  const [to, setTo] = useState(searchCache.to);
+  const [submitted, setSubmitted] = useState<EventSearchParams | null>(searchCache.submitted);
+
+  useEffect(() => {
+    searchCache = { term, from, to, submitted };
+  }, [term, from, to, submitted]);
 
   const { data, isFetching, isError, error } = useQuery({
     queryKey: ["events", submitted],
