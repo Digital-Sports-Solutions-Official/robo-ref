@@ -12,6 +12,7 @@
   --border: #e2e8f0;
   --primary: #2563eb;
   --primary-foreground: #ffffff;
+  --alliance-blue: #2563eb;
   --danger: #dc2626;
   --warning: #d97706;
   --success: #16a34a;
@@ -26,6 +27,7 @@
   --border: #2c2c30;
   --primary: #f97316;
   --primary-foreground: #1a0f02;
+  --alliance-blue: #3b82f6;
   --danger: #ef4444;
   --warning: #f59e0b;
   --success: #22c55e;
@@ -40,6 +42,7 @@
   --color-border: var(--border);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-alliance-blue: var(--alliance-blue);
   --color-danger: var(--danger);
   --color-warning: var(--warning);
   --color-success: var(--success);

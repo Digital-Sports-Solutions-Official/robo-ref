@@ -451,7 +451,7 @@ function MatchRow({
 
 function AllianceLine({ color, teams, score }: { color: "red" | "blue"; teams: string[]; score?: number | null }) {
   return (
-    <div className={cn("rounded-lg px-2 py-1", color === "red" ? "bg-danger/10 text-danger" : "bg-primary/10 text-primary")}>
+    <div className={cn("rounded-lg px-2 py-1", color === "red" ? "bg-danger/10 text-danger" : "bg-alliance-blue/10 text-alliance-blue")}>
       <div className="flex items-center justify-between">
         <span className="font-medium">{teams.join("  ") || "—"}</span>
         {typeof score === "number" ? <span className="font-mono text-xs">{score}</span> : null}
@@ -648,7 +648,7 @@ function MatchOutcome({
       ? v === "red"
         ? "border-danger bg-danger text-white"
         : v === "blue"
-          ? "border-primary bg-primary text-primary-foreground"
+          ? "border-alliance-blue bg-alliance-blue text-white"
           : "border-foreground/40 bg-foreground/10 text-foreground"
       : "border-border text-muted-foreground hover:text-foreground";
 
@@ -683,7 +683,7 @@ function MatchOutcome({
               awp.includes(a)
                 ? a === "red"
                   ? "border-danger bg-danger/15 text-danger"
-                  : "border-primary bg-primary/15 text-primary"
+                  : "border-alliance-blue bg-alliance-blue/15 text-alliance-blue"
                 : "border-border text-muted-foreground hover:text-foreground",
             )}
           >
@@ -806,12 +806,12 @@ function MatchSheet({
         const cfg = get(config, t.number);
         const isOpen = expanded === t.number;
         return (
-          <div key={t.number} className={cn("overflow-hidden rounded-xl border", t.color === "red" ? "border-danger/30" : "border-primary/30")}>
+          <div key={t.number} className={cn("overflow-hidden rounded-xl border", t.color === "red" ? "border-danger/30" : "border-alliance-blue/30")}>
             <button
               onClick={() => setExpanded(isOpen ? null : t.number)}
               className={cn("flex w-full items-center justify-between px-3 py-2.5", cfg.state === "violation" ? "bg-warning/15" : "")}
             >
-              <span className={cn("font-semibold", t.color === "red" ? "text-danger" : "text-primary")}>{t.number}</span>
+              <span className={cn("font-semibold", t.color === "red" ? "text-danger" : "text-alliance-blue")}>{t.number}</span>
               <span className="flex items-center gap-2 text-xs text-muted-foreground">
                 {cfg.state === "violation" ? (
                   <Badge tone={cfg.dq ? "danger" : "warning"}>
@@ -831,7 +831,7 @@ function MatchSheet({
               <div className="border-t border-border px-3 py-3">
                 <div className="grid grid-cols-3 gap-1 rounded-lg border border-border p-1">
                   {(["none", "violation", "note"] as const).map((s) => {
-                    const activeCls = t.color === "red" ? "bg-danger text-white" : "bg-primary text-primary-foreground";
+                    const activeCls = t.color === "red" ? "bg-danger text-white" : "bg-alliance-blue text-white";
                     return (
                       <button
                         key={s}
