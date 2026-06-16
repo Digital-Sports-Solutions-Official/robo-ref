@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
 import { Badge, Button, Input, Modal, Sheet, Spinner } from "@/components/ui";
 import { RuleSelect } from "@/components/rule-select";
+import { PhotoPanel } from "@/components/photo-panel";
 import { getDivisionMatches, getEventTeams } from "@/lib/vex/client";
 import { programFromEvent, type Program } from "@/lib/vex/rules";
 import { useIdentity } from "@/components/identity-provider";
@@ -77,11 +78,13 @@ export function SessionScreen({
   store,
   headerRight,
   backHref,
+  sessionId,
 }: {
   event: VexEvent;
   store: SessionStore;
   headerRight?: React.ReactNode;
   backHref?: string;
+  sessionId?: string;
 }) {
   const { name, userId } = useIdentity();
   const author = name || "Anonymous";
@@ -245,6 +248,7 @@ export function SessionScreen({
         {openTeam ? (
           <TeamSheet
             team={openTeam}
+            sessionId={sessionId}
             incidents={incidentsByTeam.get(openTeam.number) ?? []}
             onOpenMatch={openMatchForIncident}
             onRemove={remove}
@@ -957,12 +961,14 @@ function TeamRunningLog({ incidents }: { incidents: Incident[] }) {
 
 function TeamSheet({
   team,
+  sessionId,
   incidents,
   onOpenMatch,
   onRemove,
   isMine,
 }: {
   team: { number: string; name: string };
+  sessionId?: string;
   incidents: Incident[];
   onOpenMatch: (i: Incident) => void;
   onRemove: (id: string) => void;
@@ -977,6 +983,15 @@ function TeamSheet({
       <p className="mt-1 text-xs text-muted-foreground">
         Log of DQs, violations, and notes. Tap an entry to open its match.
       </p>
+      {sessionId ? (
+        <div className="mt-3">
+          <PhotoPanel sessionId={sessionId} team={team.number} />
+        </div>
+      ) : (
+        <p className="mt-3 rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+          Go online to add inspection photos for this team.
+        </p>
+      )}
       <div className="mt-3 flex flex-col gap-2">
         {incidents.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">No entries for this team yet.</p>

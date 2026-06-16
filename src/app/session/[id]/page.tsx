@@ -123,6 +123,7 @@ export default function OnlineSessionPage() {
     <SessionScreen
       event={event}
       store={store}
+      sessionId={id}
       backHref="/"
       headerRight={
         <SessionMenu
