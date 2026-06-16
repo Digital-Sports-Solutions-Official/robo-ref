@@ -133,4 +133,8 @@ export default function HomePage() {
       <RecentSessions />
 
       <p className="mt-auto pt-10 text-center text-xs text-muted-foreground">
-        Your log is stored on this device until you share
+        Your log is stored on this device until you share it
+      </p>
+    </main>
+  );
+}
